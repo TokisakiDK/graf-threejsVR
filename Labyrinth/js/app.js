@@ -191,7 +191,8 @@ function init() {
     mapData.sfxPortalB = portalSoundB;
     mapData.sfxPortalP = portalSoundP;
 
-    initPlayer(scene, mapData.spawnPosition, renderer); // Pasamos el renderer para leer los controles VR
+    initPlayer(scene, mapData.spawnPosition, renderer, camera); // Pasamos también la cámara para rig VR
+
 
     window.addEventListener('resize', () => { 
         camera.aspect = window.innerWidth / window.innerHeight; 
@@ -244,7 +245,8 @@ function animate() {
     
     if (mapData && gameStarted) {
         updatePlayer(delta, camera, mapData, renderer); // Pasamos renderer para detectar VR
-        if (!isUIOpen && !successTriggered) updatePlayer(delta, camera, mapData);
+        if (!isUIOpen && !successTriggered) updatePlayer(delta, camera, mapData, renderer);
+
 
         if (!isUIOpen && !doorOpened) {
             let cercaDePinpad = mapData.pinpadObj && camera.position.distanceTo(mapData.pinpadObj.position) < 250;

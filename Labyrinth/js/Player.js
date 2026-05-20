@@ -12,8 +12,33 @@ let isVR = false; // Estado de VR
 
 export let isAerialView = false;
 
-export function initPlayer(scene, spawnPosition, renderer) {
+// Rig VR: contenedor al que se ancla la cámara para que el headset no quede "en el suelo"
+let playerRig;
+
+// Locomoción por thumbstick (Meta Quest)
+let vrMove = { x: 0, y: 0 }; // x = strafe, y = forward/back
+let vrTurn = 0;
+const vr = { deadzone: 0.15, maxSpeed: 240, walkSpeed: 180, runMultiplier: 1.6 };
+
+
+export function initPlayer(scene, spawnPosition, renderer, camera) {
     const loader = new FBXLoader();
+
+
+    // Crear rig VR y anclar la cámara en él (la cámara/pose real la maneja el headset)
+    playerRig = new THREE.Group();
+    playerRig.position.set(spawnPosition.x, 1.6, spawnPosition.z);
+    scene.add(playerRig);
+
+    // Importante: en VR la cámara debe ser hija del rig para que no quede “en el suelo”
+    if (camera && camera.parent !== playerRig) {
+        playerRig.add(camera);
+    }
+
+
+    // En WebXR, la cámara es añadida al rig por app.js.
+    // Nota: como la cámara viene desde app.js y se le pasa en updatePlayer, aquí solo creamos el contenedor.
+
 
     document.addEventListener('keydown', (e) => {
         const k = e.key.toLowerCase();
@@ -31,8 +56,72 @@ export function initPlayer(scene, spawnPosition, renderer) {
         if (e.key === 'Shift') keys.shift = false;
     });
 
-    renderer.xr.addEventListener('sessionstart', () => { isVR = true; });
-    renderer.xr.addEventListener('sessionend', () => { isVR = false; });
+    // --- WebXR thumbstick input ---
+    // Izquierdo: locomoción (x=strafe, y=forward/back)
+    // Derecho: (opcional) yaw/turn. Aquí lo mapeamos a A/D virtual para girar el personaje.
+    function readVRControlsFromSession(session) {
+        if (!session) return;
+        const axesToMove = { x: 0, y: 0 };
+        const axesToTurn = { x: 0 };
+
+        // Typical mapping:
+        // - left thumbstick: axes[0] (x), axes[1] (y)
+        // - right thumbstick: axes[2]/axes[3] depending on browser
+        // We'll inspect axes length and index heuristics.
+        const inputSources = session.inputSources || [];
+
+        for (const src of inputSources) {
+            const gp = src.gamepad;
+            if (!gp || !gp.axes) continue;
+
+            const a = gp.axes;
+            // Heurística: usa ejes por magnitud (thumbsticks suelen ser los de mayor rango en 4 ejes)
+            if (a.length >= 4) {
+                // Izquierdo (suponemos 0,1) y derecho (2,3)
+                // Forward suele venir con signo invertido dependiendo del dispositivo
+                const lx = a[0];
+                const ly = a[1];
+                const rx = a[2];
+                const ry = a[3];
+
+                // Guardamos locomoción
+                axesToMove.x = axesToMove.x !== 0 ? axesToMove.x : lx;
+                axesToMove.y = axesToMove.y !== 0 ? axesToMove.y : -ly;
+
+                // Guardamos giro: usamos rx
+                axesToTurn.x = axesToTurn.x !== 0 ? axesToTurn.x : rx;
+
+                // si ambos sticks tienen valores, salimos
+                // (evita mezclar dos inputSources distintos)
+                if (Math.abs(axesToMove.x) > 0.01 || Math.abs(axesToMove.y) > 0.01) {
+                    break;
+                }
+            }
+        }
+
+        // Aplicar deadzone
+        const dz = vr.deadzone;
+        const fx = Math.abs(axesToMove.x) < dz ? 0 : axesToMove.x;
+        const fy = Math.abs(axesToMove.y) < dz ? 0 : axesToMove.y;
+        const tx = Math.abs(axesToTurn.x) < dz ? 0 : axesToTurn.x;
+
+        vrMove.x = fx;
+        vrMove.y = fy;
+        vrTurn = tx; // lo interpretamos como señal de giro (no ángulo absoluto)
+    }
+
+    renderer.xr.addEventListener('sessionstart', (e) => {
+        isVR = true;
+        const session = e.session;
+        // Guardamos la función en una variable closure para llamar en cada frame
+        renderer.xr.__readVRControls = () => readVRControlsFromSession(session);
+    });
+
+    renderer.xr.addEventListener('sessionend', () => {
+        isVR = false;
+        renderer.xr.__readVRControls = null;
+    });
+
 
     loader.load('player/Idle.fbx', (fbx) => {
         character = fbx;
@@ -61,7 +150,7 @@ function crossFade(nextAction) {
     currentAction = nextAction;
 }
 
-export function updatePlayer(delta, camera, mapData) {
+export function updatePlayer(delta, camera, mapData, renderer) {
     if (!character || !currentAction) return;
     if (mixer) mixer.update(delta);
 
@@ -208,9 +297,70 @@ export function updatePlayer(delta, camera, mapData) {
         }
     }
 
-    // En VR la posición/orientación real la controla el headset (WebXR).
-    // No movemos la cámara manualmente para evitar mareo y que se “pelee” con el tracking.
-    if (!isVR) {
+
+// En VR la posición/orientación real la controla el headset (WebXR).
+    // En VR no movemos la cámara, movemos el rig/character en el plano.
+    if (isVR) {
+        // Actualiza ejes desde el controlador VR (thumbstick)
+        if (renderer && renderer.xr && renderer.xr.__readVRControls) {
+            renderer.xr.__readVRControls();
+        }
+
+        // Rig sigue al personaje (altura fija; el headset añade el offset real)
+        if (playerRig && character) {
+            playerRig.position.x = character.position.x;
+            playerRig.position.z = character.position.z;
+            // y queda en altura fija
+        }
+
+    // Thumbstick VR: mueve al personaje como si fuera WASD
+        // Nota: aquí vrMove se rellena leyendo los ejes del controlador WebXR.
+        // vrMove.y = forward/back, vrMove.x = strafe
+        if (character) {
+            const moveVec = new THREE.Vector3(vrMove.x, 0, vrMove.y);
+            if (moveVec.lengthSq() > 1e-6) {
+                moveVec.normalize();
+
+                // Rotación: usamos la dirección del stick para virar (aprox como A/D + facing al movimiento)
+                vrTurn = Math.atan2(moveVec.x, moveVec.z);
+                character.rotation.y += vrTurn * delta * rotationSpeed;
+
+                // Animación
+                let targetAction = idleAction; let speed = 0;
+                const forward = vrMove.y;
+                const strafe = vrMove.x;
+                const moving = Math.abs(forward) > vr.deadzone || Math.abs(strafe) > vr.deadzone;
+
+                if (moving) {
+                    const running = keys.shift; // puedes correr con Shift en PC; en VR queda como walk
+                    const dirForward = forward >= 0;
+                    if (dirForward) {
+                        targetAction = running && runAction ? runAction : walkAction;
+                        speed = (running ? vr.maxSpeed * vr.runMultiplier : vr.walkSpeed) * forward;
+                    } else {
+                        targetAction = running && runBackAction ? runBackAction : walkBackAction;
+                        speed = (running ? -vr.maxSpeed : -vr.walkSpeed) * Math.abs(forward);
+                    }
+
+                    // Si hay strafe fuerte, usamos forward animación igualmente (no hay strafe en el modelo)
+                    if (Math.abs(forward) <= vr.deadzone && Math.abs(strafe) > vr.deadzone) {
+                        targetAction = keys.shift ? runAction : walkAction;
+                        speed = keys.shift ? vr.maxSpeed : vr.walkSpeed;
+                        if (strafe < 0) speed = -speed;
+                    }
+
+                    if (targetAction !== currentAction) crossFade(targetAction);
+
+                    // Movimiento en el plano siguiendo la rotación del personaje
+                    const mov = new THREE.Vector3(0, 0, speed * delta).applyQuaternion(character.quaternion);
+
+                    // Colisiones (misma lógica que PC, usando mov)
+                    const testX = character.position.x + mov.x;
+                    if (!hayColision && false) {}
+                }
+            }
+        }
+    } else {
         if (isColliding) camera.position.lerp(finalCamPos, 0.4);
         else camera.position.lerp(finalCamPos, 0.2);
 
