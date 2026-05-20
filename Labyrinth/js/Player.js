@@ -8,13 +8,7 @@ let portalCooldown = 0;
 
 export let isAerialView = false;
 
-const keys = {
-    w: false,
-    a: false,
-    s: false,
-    d: false,
-    shift: false
-};
+const keys = { w: false, a: false, s: false, d: false, shift: false };
 
 const config = {
     eyeHeight: 175,
@@ -30,20 +24,7 @@ const vrInput = {
     leftX: 0,
     leftY: 0,
     rightX: 0,
-
-    running: false,
-
-    interactNow: false,
-    interactPrev: false,
-    interactConsumed: false,
-
-    confirmNow: false,
-    confirmPrev: false,
-    confirmConsumed: false,
-
-    cancelNow: false,
-    cancelPrev: false,
-    cancelConsumed: false
+    running: false
 };
 
 const playerPosition = new THREE.Vector3();
@@ -54,127 +35,36 @@ export function initPlayer(scene, spawnPosition, renderer, camera) {
     vrRig = new THREE.Group();
     vrRig.name = 'VR_CAMERA_RIG';
 
-    vrRig.position.set(
-        spawnPosition.x,
-        config.eyeHeight,
-        spawnPosition.z
-    );
-
+    vrRig.position.set(spawnPosition.x, config.eyeHeight, spawnPosition.z);
     scene.add(vrRig);
 
     camera.position.set(0, 0, 0);
     camera.rotation.set(0, 0, 0);
-
     vrRig.add(camera);
 
-    playerPosition.set(
-        spawnPosition.x,
-        0,
-        spawnPosition.z
-    );
+    playerPosition.set(spawnPosition.x, 0, spawnPosition.z);
 
     document.addEventListener('keydown', (e) => {
         const k = e.key.toLowerCase();
-
-        if (k in keys) {
-            keys[k] = true;
-        }
-
-        if (e.key === 'Shift') {
-            keys.shift = true;
-        }
-
-        if (k === 'v') {
-            isAerialView = !isAerialView;
-        }
+        if (k in keys) keys[k] = true;
+        if (e.key === 'Shift') keys.shift = true;
+        if (k === 'v') isAerialView = !isAerialView;
     });
 
     document.addEventListener('keyup', (e) => {
         const k = e.key.toLowerCase();
-
-        if (k in keys) {
-            keys[k] = false;
-        }
-
-        if (e.key === 'Shift') {
-            keys.shift = false;
-        }
+        if (k in keys) keys[k] = false;
+        if (e.key === 'Shift') keys.shift = false;
     });
 
-    renderer.xr.addEventListener('sessionstart', () => {
-        isVR = true;
-        resetVRInput();
-        console.log('VR iniciado');
-    });
-
-    renderer.xr.addEventListener('sessionend', () => {
-        isVR = false;
-        resetVRInput();
-        console.log('VR terminado');
-    });
+    renderer.xr.addEventListener('sessionstart', () => { isVR = true; resetVRInput(); });
+    renderer.xr.addEventListener('sessionend', () => { isVR = false; resetVRInput(); });
 }
 
 export function getPlayerPosition() {
-    if (!vrRig) {
-        return playerPosition.clone();
-    }
-
-    playerPosition.set(
-        vrRig.position.x,
-        0,
-        vrRig.position.z
-    );
-
+    if (!vrRig) return playerPosition.clone();
+    playerPosition.set(vrRig.position.x, 0, vrRig.position.z);
     return playerPosition.clone();
-}
-
-export function getVRNavAxes() {
-    return {
-        x: vrInput.leftX,
-        y: vrInput.leftY
-    };
-}
-
-export function consumeVRInteractPressed() {
-    const justPressed =
-        vrInput.interactNow &&
-        !vrInput.interactPrev &&
-        !vrInput.interactConsumed;
-
-    if (justPressed) {
-        vrInput.interactConsumed = true;
-        return true;
-    }
-
-    return false;
-}
-
-export function consumeVRConfirmPressed() {
-    const justPressed =
-        vrInput.confirmNow &&
-        !vrInput.confirmPrev &&
-        !vrInput.confirmConsumed;
-
-    if (justPressed) {
-        vrInput.confirmConsumed = true;
-        return true;
-    }
-
-    return false;
-}
-
-export function consumeVRCancelPressed() {
-    const justPressed =
-        vrInput.cancelNow &&
-        !vrInput.cancelPrev &&
-        !vrInput.cancelConsumed;
-
-    if (justPressed) {
-        vrInput.cancelConsumed = true;
-        return true;
-    }
-
-    return false;
 }
 
 export function updatePlayer(delta, camera, mapData, renderer, isUIOpen = false) {
@@ -185,16 +75,11 @@ export function updatePlayer(delta, camera, mapData, renderer, isUIOpen = false)
         return;
     }
 
-    if (isVR) {
-        readVRControls(renderer);
-    }
+    if (isVR) readVRControls(renderer);
 
     if (!isUIOpen) {
-        if (isVR) {
-            updateVRMovement(delta, mapData);
-        } else {
-            updateKeyboardMovement(delta, mapData);
-        }
+        if (isVR) updateVRMovement(delta, mapData);
+        else updateKeyboardMovement(delta, mapData);
     }
 
     updatePortals(delta, mapData);
@@ -202,116 +87,49 @@ export function updatePlayer(delta, camera, mapData, renderer, isUIOpen = false)
 }
 
 function resetVRInput() {
-    vrInput.leftX = 0;
-    vrInput.leftY = 0;
-    vrInput.rightX = 0;
-
-    vrInput.running = false;
-
-    vrInput.interactNow = false;
-    vrInput.interactPrev = false;
-    vrInput.interactConsumed = false;
-
-    vrInput.confirmNow = false;
-    vrInput.confirmPrev = false;
-    vrInput.confirmConsumed = false;
-
-    vrInput.cancelNow = false;
-    vrInput.cancelPrev = false;
-    vrInput.cancelConsumed = false;
+    vrInput.leftX = 0; vrInput.leftY = 0; vrInput.rightX = 0; vrInput.running = false;
 }
 
 function readVRControls(renderer) {
-    vrInput.leftX = 0;
-    vrInput.leftY = 0;
-    vrInput.rightX = 0;
-
-    vrInput.running = false;
-
-    vrInput.interactPrev = vrInput.interactNow;
-    vrInput.confirmPrev = vrInput.confirmNow;
-    vrInput.cancelPrev = vrInput.cancelNow;
-
-    vrInput.interactNow = false;
-    vrInput.confirmNow = false;
-    vrInput.cancelNow = false;
-
-    vrInput.interactConsumed = false;
-    vrInput.confirmConsumed = false;
-    vrInput.cancelConsumed = false;
+    vrInput.leftX = 0; vrInput.leftY = 0; vrInput.rightX = 0; vrInput.running = false;
 
     const session = renderer.xr.getSession();
-
     if (!session) return;
 
     const sources = Array.from(session.inputSources);
 
     for (let i = 0; i < sources.length; i++) {
         const source = sources[i];
-
         if (!source.gamepad) continue;
 
         const gamepad = source.gamepad;
         const axes = gamepad.axes || [];
         const buttons = gamepad.buttons || [];
-
         const stick = getStickAxes(axes);
-
         const handedness = source.handedness || (i === 0 ? 'left' : 'right');
 
         if (handedness === 'left') {
             vrInput.leftX = applyDeadzone(stick.x);
             vrInput.leftY = applyDeadzone(stick.y);
-
-            // Gatillo izquierdo para correr.
-            vrInput.running =
-                isButtonPressed(buttons, 0) ||
-                isButtonPressed(buttons, 1);
+            // GATILLO IZQUIERDO PARA CORRER
+            vrInput.running = isButtonPressed(buttons, 0); 
         }
 
         if (handedness === 'right') {
-            vrInput.rightX = applyDeadzone(stick.x);
-
-            // Gatillo derecho para interactuar.
-            vrInput.interactNow =
-                isButtonPressed(buttons, 0) ||
-                isButtonPressed(buttons, 1);
-
-            // Botón A para presionar.
-            vrInput.confirmNow =
-                isButtonPressed(buttons, 4);
-
-            // Botón B para cerrar / cancelar.
-            vrInput.cancelNow =
-                isButtonPressed(buttons, 5);
+            // Mando derecho controla cámara horizontal
+            vrInput.rightX = applyDeadzone(stick.x); 
         }
     }
 }
 
 function getStickAxes(axes) {
-    if (!axes || axes.length === 0) {
-        return {
-            x: 0,
-            y: 0
-        };
-    }
-
+    if (!axes || axes.length === 0) return { x: 0, y: 0 };
     if (axes.length >= 4) {
         const pairA = Math.abs(axes[0] || 0) + Math.abs(axes[1] || 0);
         const pairB = Math.abs(axes[2] || 0) + Math.abs(axes[3] || 0);
-
-        if (pairB >= pairA) {
-            return {
-                x: axes[2] || 0,
-                y: axes[3] || 0
-            };
-        }
+        if (pairB >= pairA) return { x: axes[2] || 0, y: axes[3] || 0 };
     }
-
-    return {
-        x: axes[0] || 0,
-        y: axes[1] || 0
-    };
+    return { x: axes[0] || 0, y: axes[1] || 0 };
 }
 
 function isButtonPressed(buttons, index) {
@@ -319,11 +137,7 @@ function isButtonPressed(buttons, index) {
 }
 
 function applyDeadzone(value) {
-    if (Math.abs(value) < config.deadzone) {
-        return 0;
-    }
-
-    return value;
+    return Math.abs(value) < config.deadzone ? 0 : value;
 }
 
 function updateVRMovement(delta, mapData) {
@@ -337,53 +151,36 @@ function updateVRMovement(delta, mapData) {
     if (moveX === 0 && moveY === 0) return;
 
     const speed = vrInput.running ? config.runSpeed : config.walkSpeed;
-
     const forward = new THREE.Vector3();
     const right = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0);
 
     cameraRef.getWorldDirection(forward);
-
     forward.y = 0;
 
     if (forward.lengthSq() === 0) return;
 
     forward.normalize();
-
     right.crossVectors(forward, up).normalize();
 
     const direction = new THREE.Vector3();
-
     direction.addScaledVector(forward, -moveY);
     direction.addScaledVector(right, moveX);
 
     if (direction.lengthSq() === 0) return;
-
     direction.normalize();
 
     const movement = direction.multiplyScalar(speed * delta);
-
     tryMove(movement.x, movement.z, mapData);
 }
 
 function updateKeyboardMovement(delta, mapData) {
-    if (keys.a) {
-        vrRig.rotation.y += config.turnSpeedPC * delta;
-    }
-
-    if (keys.d) {
-        vrRig.rotation.y -= config.turnSpeedPC * delta;
-    }
+    if (keys.a) vrRig.rotation.y += config.turnSpeedPC * delta;
+    if (keys.d) vrRig.rotation.y -= config.turnSpeedPC * delta;
 
     let speed = 0;
-
-    if (keys.w) {
-        speed = keys.shift ? config.runSpeed : config.walkSpeed;
-    }
-
-    if (keys.s) {
-        speed = keys.shift ? -config.runSpeed : -config.walkSpeed;
-    }
+    if (keys.w) speed = keys.shift ? config.runSpeed : config.walkSpeed;
+    if (keys.s) speed = keys.shift ? -config.runSpeed : -config.walkSpeed;
 
     if (speed === 0) return;
 
@@ -392,7 +189,6 @@ function updateKeyboardMovement(delta, mapData) {
     direction.normalize();
 
     const movement = direction.multiplyScalar(speed * delta);
-
     tryMove(movement.x, movement.z, mapData);
 }
 
@@ -401,54 +197,28 @@ function tryMove(moveX, moveZ, mapData) {
     const currentZ = vrRig.position.z;
 
     const nextX = currentX + moveX;
-
-    if (!hayColision(nextX, currentZ, mapData)) {
-        if (!chocaConObstaculo(nextX, currentZ, mapData)) {
-            vrRig.position.x = nextX;
-        }
+    if (!hayColision(nextX, currentZ, mapData) && !chocaConObstaculo(nextX, currentZ, mapData)) {
+        vrRig.position.x = nextX;
     }
 
     const nextZ = currentZ + moveZ;
-
-    if (!hayColision(vrRig.position.x, nextZ, mapData)) {
-        if (!chocaConObstaculo(vrRig.position.x, nextZ, mapData)) {
-            vrRig.position.z = nextZ;
-        }
+    if (!hayColision(vrRig.position.x, nextZ, mapData) && !chocaConObstaculo(vrRig.position.x, nextZ, mapData)) {
+        vrRig.position.z = nextZ;
     }
 
-    playerPosition.set(
-        vrRig.position.x,
-        0,
-        vrRig.position.z
-    );
+    playerPosition.set(vrRig.position.x, 0, vrRig.position.z);
 }
 
 function hayColision(futuraX, futuraZ, mapData) {
     const radio = config.radius;
     const correccionOffset = mapData.offset + mapData.tileSize / 2;
 
-    const colDerecha = Math.floor(
-        (futuraX + correccionOffset + radio) / mapData.tileSize
-    );
+    const colDerecha = Math.floor((futuraX + correccionOffset + radio) / mapData.tileSize);
+    const colIzquierda = Math.floor((futuraX + correccionOffset - radio) / mapData.tileSize);
+    const filaAbajo = Math.floor((futuraZ + correccionOffset + radio) / mapData.tileSize);
+    const filaArriba = Math.floor((futuraZ + correccionOffset - radio) / mapData.tileSize);
 
-    const colIzquierda = Math.floor(
-        (futuraX + correccionOffset - radio) / mapData.tileSize
-    );
-
-    const filaAbajo = Math.floor(
-        (futuraZ + correccionOffset + radio) / mapData.tileSize
-    );
-
-    const filaArriba = Math.floor(
-        (futuraZ + correccionOffset - radio) / mapData.tileSize
-    );
-
-    if (
-        filaArriba < 0 ||
-        filaAbajo >= mapData.grid.length ||
-        colIzquierda < 0 ||
-        colDerecha >= mapData.grid[0].length
-    ) {
+    if (filaArriba < 0 || filaAbajo >= mapData.grid.length || colIzquierda < 0 || colDerecha >= mapData.grid[0].length) {
         return true;
     }
 
@@ -459,9 +229,7 @@ function hayColision(futuraX, futuraZ, mapData) {
         mapData.grid[filaAbajo][colDerecha]
     ];
 
-    return esquinas.some((valor) => {
-        return valor === 1 || valor === 5 || valor === 2;
-    });
+    return esquinas.some((valor) => valor === 1 || valor === 5 || valor === 2);
 }
 
 function chocaConObstaculo(x, z, mapData) {
@@ -471,12 +239,9 @@ function chocaConObstaculo(x, z, mapData) {
     );
 
     for (const obstacle of mapData.obstacles) {
-        if (!obstacle) continue;
-
-        if (obstacle.isInstancedMesh) continue;
+        if (!obstacle || obstacle.isInstancedMesh) continue;
 
         let obstacleBox;
-
         if (obstacle.boundingBox) {
             obstacle.updateMatrixWorld(true);
             obstacle.boundingBox.setFromObject(obstacle);
@@ -486,11 +251,8 @@ function chocaConObstaculo(x, z, mapData) {
             obstacleBox = new THREE.Box3().setFromObject(obstacle);
         }
 
-        if (playerBox.intersectsBox(obstacleBox)) {
-            return true;
-        }
+        if (playerBox.intersectsBox(obstacleBox)) return true;
     }
-
     return false;
 }
 
@@ -506,32 +268,19 @@ function updatePortals(delta, mapData) {
         const p1 = mapData.linkedPortals[0];
         const p2 = mapData.linkedPortals[1];
 
-        if (pos.distanceTo(p1) < 120) {
-            teleportTo(p2.x, p2.z);
-            portalCooldown = 2.0;
-            playSound(mapData.sfxPortalB);
-            return;
-        }
-
-        if (pos.distanceTo(p2) < 120) {
-            teleportTo(p1.x, p1.z);
-            portalCooldown = 2.0;
-            playSound(mapData.sfxPortalB);
-            return;
-        }
+        if (pos.distanceTo(p1) < 120) { teleportTo(p2.x, p2.z); portalCooldown = 2.0; playSound(mapData.sfxPortalB); return; }
+        if (pos.distanceTo(p2) < 120) { teleportTo(p1.x, p1.z); portalCooldown = 2.0; playSound(mapData.sfxPortalB); return; }
     }
 
     if (mapData.randomPortals.length > 0) {
         for (const portal of mapData.randomPortals) {
             if (pos.distanceTo(portal) < 120) {
                 const randomSpot = getRandomSafeSpot(mapData);
-
                 if (randomSpot) {
                     teleportTo(randomSpot.x, randomSpot.z);
                     portalCooldown = 2.0;
                     playSound(mapData.sfxPortalP);
                 }
-
                 return;
             }
         }
@@ -544,68 +293,39 @@ function getRandomSafeSpot(mapData) {
     let attempts = 0;
 
     while (!isValid && attempts < 50) {
-        randomSpot =
-            mapData.safeSpots[
-                Math.floor(Math.random() * mapData.safeSpots.length)
-            ];
-
+        randomSpot = mapData.safeSpots[Math.floor(Math.random() * mapData.safeSpots.length)];
         isValid = true;
-
-        const allPortals = [
-            ...mapData.linkedPortals,
-            ...mapData.randomPortals
-        ];
-
+        const allPortals = [...mapData.linkedPortals, ...mapData.randomPortals];
         for (const p of allPortals) {
-            if (randomSpot.distanceTo(p) < 300) {
-                isValid = false;
-                break;
-            }
+            if (randomSpot.distanceTo(p) < 300) { isValid = false; break; }
         }
-
         attempts++;
     }
-
     return randomSpot;
 }
 
 function teleportTo(x, z) {
     vrRig.position.x = x;
     vrRig.position.z = z;
-
     playerPosition.set(x, 0, z);
 }
 
 function playSound(sound) {
     if (!sound || !sound.buffer) return;
-
-    if (sound.isPlaying) {
-        sound.stop();
-    }
-
+    if (sound.isPlaying) sound.stop();
     sound.play();
 }
 
 function updatePortalsFacingCamera(mapData, camera) {
     if (!mapData.portalsArray) return;
-
     const camWorldPos = new THREE.Vector3();
     camera.getWorldPosition(camWorldPos);
-
-    mapData.portalsArray.forEach((portal) => {
-        portal.lookAt(camWorldPos);
-    });
+    mapData.portalsArray.forEach((portal) => { portal.lookAt(camWorldPos); });
 }
 
 function updateAerialView(camera) {
     const pos = getPlayerPosition();
-
-    const aerialPos = new THREE.Vector3(
-        pos.x,
-        3000,
-        pos.z + 10
-    );
-
+    const aerialPos = new THREE.Vector3(pos.x, 3000, pos.z + 10);
     camera.position.lerp(aerialPos, 0.05);
     camera.lookAt(pos);
 }
