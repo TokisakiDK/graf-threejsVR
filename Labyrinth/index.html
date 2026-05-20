@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laberinto de Día 3D</title>
+    <link rel="icon" type="image/png" href="../assets/Cat.png">
+    <link rel="stylesheet" href="style.css">
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="loading-screen" class="screen-overlay">
+        <div class="text-center">
+            <h2 class="neon-text">CARGANDO RECURSOS...</h2>
+            <div class="progress-bar-container">
+                <div id="progress-bar"></div>
+            </div>
+            <p id="loading-text" class="neon-text">0%</p>
+        </div>
+    </div>
+
+    <div id="start-screen" class="screen-overlay" style="display: none;">
+        <div class="start-panel">
+            <h1 class="main-title">LABERINTO 3D</h1>
+            
+            <div class="game-instructions">
+                <h3>OBJETIVO</h3>
+                <p>Estás atrapado en un laberinto cambiante. Encuentra el PinPad oculto y busca las pistas esparcidas en el mapa para descubrir el código secreto de 4 dígitos. ¡Solo así se abrirá la salida!</p>
+                
+                <h3>CONTROLES</h3>
+                <ul class="controls-list">
+                    <li><span>W / S</span> Caminar</li>
+                    <li><span>A / D</span> Girar cámara</li>
+                    <li><span>Shift</span> Correr</li>
+                    <li><span>E</span> Interactuar</li>
+                </ul>
+            </div>
+
+            <button id="start-btn" class="glow-btn">INICIAR JUEGO</button>
+        </div>
+    </div>
+
+    <div id="success-screen" class="screen-overlay" style="display: none;">
+        <div class="text-center">
+            <h1 class="main-title" style="color: #4ade80; text-shadow: 0 0 20px rgba(74, 222, 128, 0.8);">¡ESCAPASTE!</h1>
+            <p class="subtitle text-white">Has logrado salir del laberinto exitosamente.</p>
+            <button id="restart-btn" class="glow-btn" style="border-color: #4ade80; color: #4ade80;" onclick="window.location.reload()">JUGAR DE NUEVO</button>
+        </div>
+    </div>
+
+    <div id="game-container"></div>
+    
+    <div id="interact-prompt" style="display: none;">[ E ] PARA INTERACTUAR</div>
+
+    <div id="door-alert" style="display: none; position: absolute; top: 20%; left: 50%; transform: translateX(-50%); background-color: rgba(255, 42, 95, 0.9); color: white; padding: 15px 30px; border-radius: 8px; font-weight: bold; border: 2px solid #ff2a5f; z-index: 100; text-shadow: 1px 1px 2px #000; letter-spacing: 1px;">
+        La puerta está bloqueada. Introduce el código en el PinPad.
+    </div>
+
+    <div id="pinpad-ui" class="screen-overlay" style="display: none;">
+        <div class="pinpad-container">
+            <h3 class="neon-text" style="font-size: 1.2rem; margin-top: 0;">SISTEMA DE SEGURIDAD</h3>
+            <div id="pinpad-screen" class="pinpad-screen">----</div>
+            <div class="pinpad-grid">
+                <button class="pinpad-btn">1</button>
+                <button class="pinpad-btn">2</button>
+                <button class="pinpad-btn">3</button>
+                <button class="pinpad-btn">4</button>
+                <button class="pinpad-btn">5</button>
+                <button class="pinpad-btn">6</button>
+                <button class="pinpad-btn">7</button>
+                <button class="pinpad-btn">8</button>
+                <button class="pinpad-btn">9</button>
+                <button class="pinpad-btn btn-rojo" id="pinpad-clear">C</button>
+                <button class="pinpad-btn">0</button>
+                <button class="pinpad-btn btn-verde" id="pinpad-enter">E</button>
+            </div>
+            <p id="pinpad-msg" class="pinpad-msg">INTRODUCE EL PIN</p>
+            <button id="pinpad-close" class="glow-btn" style="margin-top: 15px; padding: 5px 20px; font-size: 0.9rem;">SALIR</button>
+        </div>
+    </div>
+
+    <div id="author-panel" class="author-panel">
+        <div class="author-handle">
+            <span>ℹ Info</span>
+        </div>
+        <div class="author-content">
+            <p><strong>Desarrollo:</strong> David Adolfo Ramírez Vera</p>
+            <p><strong>Carrera:</strong> Ing. en Sistemas Computacionales</p>
+            <p><strong>Institución:</strong> Instituto Tecnológico de Pachuca</p>
+        </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

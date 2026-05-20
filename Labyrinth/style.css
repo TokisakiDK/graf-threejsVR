@@ -1,0 +1,322 @@
+/* --- CONFIGURACIÓN BASE DEL JUEGO (BLOQUEO DE SCROLL) --- */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden; /* ¡Esto es lo que bloquea el scroll mágico! */
+    background-color: #000; /* Fondo negro puro */
+    font-family: Arial, sans-serif;
+    user-select: none; /* Evita que el usuario seleccione texto por accidente al jugar */
+}
+
+#game-container {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* --- PANTALLAS DE CARGA E INICIO --- */
+#loading-screen, #start-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #0f0f14;
+    color: #ffffff;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.neon-text {
+    color: #0dcaf0;
+    text-shadow: 0 0 10px rgba(13, 202, 240, 0.7);
+    letter-spacing: 2px;
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+}
+
+.progress-bar-container {
+    width: 300px;
+    height: 15px;
+    border: 2px solid #0dcaf0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 15px auto;
+    box-shadow: 0 0 10px rgba(13, 202, 240, 0.4);
+}
+
+#progress-bar {
+    width: 0%;
+    height: 100%;
+    background-color: #0dcaf0;
+    box-shadow: 0 0 15px #0dcaf0;
+    transition: width 0.2s ease-out;
+}
+
+.main-title {
+    font-size: 4rem;
+    color: #0dcaf0;
+    text-shadow: 0 0 20px rgba(13, 202, 240, 0.8);
+    margin-bottom: 10px;
+    letter-spacing: 4px;
+}
+
+.subtitle {
+    color: #a0a0b0;
+    font-size: 1.2rem;
+    margin-bottom: 40px;
+}
+
+#start-btn {
+    background: transparent;
+    color: #0dcaf0;
+    border: 2px solid #0dcaf0;
+    padding: 15px 40px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 5px;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+}
+
+#start-btn:hover {
+    background: #0dcaf0;
+    color: #0f0f14;
+    box-shadow: 0 0 20px #0dcaf0;
+}
+
+/* --- PANTALLAS DE CARGA, INICIO Y ÉXITO --- */
+.screen-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #0f0f14;
+    color: #ffffff;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.glow-btn { 
+    background: transparent; 
+    color: #0dcaf0; 
+    border: 2px solid #0dcaf0; 
+    padding: 15px 40px; 
+    font-size: 1.2rem; 
+    font-weight: bold; 
+    cursor: pointer; 
+    border-radius: 5px; 
+    letter-spacing: 1px; 
+    transition: all 0.3s ease; 
+}
+
+.glow-btn:hover { 
+    background: inherit; 
+    color: #0f0f14; 
+    box-shadow: 0 0 20px currentColor; 
+    background-color: currentColor;
+}
+
+/* --- PROMPT DE INTERACCIÓN --- */
+#interact-prompt {
+    position: absolute;
+    top: 60%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(15, 15, 20, 0.9);
+    color: #4ade80;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+    border: 2px solid #2d6a4f;
+    z-index: 50;
+    text-shadow: 1px 1px 2px #000;
+}
+
+/* --- DISEÑO DEL NUEVO PINPAD --- */
+.pinpad-container {
+    background: rgba(15, 15, 20, 0.95);
+    border: 2px solid #0dcaf0;
+    border-radius: 10px;
+    padding: 25px;
+    box-shadow: 0 0 30px rgba(13, 202, 240, 0.3);
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.pinpad-screen {
+    background: #000;
+    color: #4ade80;
+    width: 100%;
+    height: 60px;
+    font-size: 2.5rem;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    border: 1px inset #333;
+    letter-spacing: 5px;
+}
+
+.pinpad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    width: 100%;
+}
+
+.pinpad-btn {
+    background: #1a1a24;
+    color: #fff;
+    border: 1px solid #444;
+    font-size: 1.5rem;
+    font-weight: bold;
+    padding: 15px 0;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+}
+
+.pinpad-btn:active {
+    background: #333;
+    transform: scale(0.95);
+}
+
+.btn-rojo { color: #ff2a5f; border-color: #ff2a5f; }
+.btn-verde { color: #4ade80; border-color: #4ade80; }
+
+.pinpad-msg {
+    margin-top: 20px;
+    font-weight: bold;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    color: #a0a0b0;
+}
+
+/* --- NUEVA PANTALLA DE INICIO --- */
+.start-panel {
+    background: rgba(15, 15, 20, 0.85);
+    padding: 40px;
+    border-radius: 15px;
+    border: 1px solid #0dcaf0;
+    box-shadow: 0 0 30px rgba(13, 202, 240, 0.2);
+    max-width: 600px;
+    backdrop-filter: blur(5px);
+}
+
+.game-instructions {
+    text-align: left;
+    margin: 20px 0 30px;
+    color: #ddd;
+    line-height: 1.6;
+}
+
+.game-instructions h3 { 
+    color: #0dcaf0; 
+    margin-bottom: 15px; 
+    border-bottom: 1px solid rgba(13, 202, 240, 0.3); 
+    padding-bottom: 5px;
+    letter-spacing: 1px;
+}
+
+.controls-list { 
+    list-style: none; 
+    padding: 0; 
+}
+
+.controls-list li { 
+    margin: 12px 0; 
+    font-size: 1.1rem; 
+    display: flex;
+    align-items: center;
+}
+
+.controls-list span { 
+    background: #1a1a24; 
+    padding: 4px 10px; 
+    border-radius: 6px; 
+    color: #4ade80; 
+    font-weight: bold; 
+    margin-right: 15px; 
+    border: 1px solid #444; 
+    min-width: 60px;
+    text-align: center;
+    box-shadow: inset 0 2px 0 rgba(255,255,255,0.1);
+}
+
+/* --- PANEL DESLIZANTE DE AUTOR --- */
+.author-panel {
+    position: absolute;
+    bottom: 30px;
+    right: -320px; /* Oculto por defecto */
+    width: 320px;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid #0dcaf0;
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    color: #fff;
+    transition: right 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Animación suave */
+    z-index: 100;
+    display: flex;
+    box-shadow: -5px 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+.author-panel:hover {
+    right: 0; /* Aparece al pasar el cursor */
+}
+
+.author-handle {
+    background: #0dcaf0;
+    color: #000;
+    padding: 15px 8px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 8px 0 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.author-handle span {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    letter-spacing: 2px;
+}
+
+.author-content {
+    padding: 15px 20px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.author-content p { 
+    margin: 8px 0; 
+    color: #c0c0c0; 
+}
+
+.author-content strong { 
+    color: #0dcaf0; 
+    display: block;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+}

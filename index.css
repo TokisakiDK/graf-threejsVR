@@ -1,0 +1,21 @@
+.game-card {
+    transition: transform 0.3s ease, border-color 0.3s ease;
+    cursor: default;
+}
+
+.game-card:hover {
+    transform: translateY(-10px);
+    border-color: #0dcaf0 !important;
+}
+
+.bg-gradient {
+    background: linear-gradient(180deg, #000000 0%, #1a1a1a 100%);
+}
+
+.tracking-wider {
+    letter-spacing: 0.15rem;
+}
+
+h1.display-3 {
+    text-shadow: 0 0 15px rgba(13, 202, 240, 0.4);
+}
