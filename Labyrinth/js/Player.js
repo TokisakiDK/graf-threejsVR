@@ -2,7 +2,6 @@ import * as THREE from 'three';
 
 let vrRig = null;
 let cameraRef = null;
-let rendererRef = null;
 
 let isVR = false;
 let portalCooldown = 0;
@@ -35,13 +34,15 @@ const vrInput = {
     leftX: 0,
     leftY: 0,
     rightX: 0,
-    running: false
+    running: false,
+    interactPressed: false,
+    interactPressedPrevious: false,
+    interactPressedConsumed: false
 };
 
 const playerPosition = new THREE.Vector3();
 
 export function initPlayer(scene, spawnPosition, renderer, camera) {
-    rendererRef = renderer;
     cameraRef = camera;
 
     vrRig = new THREE.Group();
@@ -96,6 +97,7 @@ export function initPlayer(scene, spawnPosition, renderer, camera) {
 
     renderer.xr.addEventListener('sessionstart', () => {
         isVR = true;
+        resetVRInput();
         console.log('VR iniciado');
     });
 
@@ -120,6 +122,23 @@ export function getPlayerPosition() {
     return playerPosition.clone();
 }
 
+export function consumeVRInteractPressed() {
+    if (vrInput.interactPressedConsumed) {
+        return false;
+    }
+
+    const justPressed =
+        vrInput.interactPressed &&
+        !vrInput.interactPressedPrevious;
+
+    if (justPressed) {
+        vrInput.interactPressedConsumed = true;
+        return true;
+    }
+
+    return false;
+}
+
 export function updatePlayer(delta, camera, mapData, renderer, isUIOpen = false) {
     if (!vrRig) return;
 
@@ -128,9 +147,12 @@ export function updatePlayer(delta, camera, mapData, renderer, isUIOpen = false)
         return;
     }
 
+    if (isVR) {
+        readVRControls(renderer);
+    }
+
     if (!isUIOpen) {
         if (isVR) {
-            readVRControls(renderer);
             updateVRMovement(delta, mapData);
         } else {
             updateKeyboardMovement(delta, mapData);
@@ -146,10 +168,20 @@ function resetVRInput() {
     vrInput.leftY = 0;
     vrInput.rightX = 0;
     vrInput.running = false;
+    vrInput.interactPressed = false;
+    vrInput.interactPressedPrevious = false;
+    vrInput.interactPressedConsumed = false;
 }
 
 function readVRControls(renderer) {
-    resetVRInput();
+    vrInput.leftX = 0;
+    vrInput.leftY = 0;
+    vrInput.rightX = 0;
+    vrInput.running = false;
+
+    vrInput.interactPressedPrevious = vrInput.interactPressed;
+    vrInput.interactPressed = false;
+    vrInput.interactPressedConsumed = false;
 
     const session = renderer.xr.getSession();
 
@@ -170,12 +202,16 @@ function readVRControls(renderer) {
 
             vrInput.running =
                 isButtonPressed(buttons, 4) ||
-                isButtonPressed(buttons, 5) ||
-                isButtonPressed(buttons, 0);
+                isButtonPressed(buttons, 5);
         }
 
         if (source.handedness === 'right') {
             vrInput.rightX = applyDeadzone(stick.x);
+
+            vrInput.interactPressed =
+                isButtonPressed(buttons, 0) ||
+                isButtonPressed(buttons, 4) ||
+                isButtonPressed(buttons, 5);
         }
     }
 }

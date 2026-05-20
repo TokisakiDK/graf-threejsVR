@@ -2,7 +2,12 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { construirMundo } from './Labyrinth.js';
-import { getPlayerPosition, initPlayer, updatePlayer } from './Player.js?v=7';
+import {
+    consumeVRInteractPressed,
+    getPlayerPosition,
+    initPlayer,
+    updatePlayer
+} from './Player.js?v=8';
 
 let camera, scene, renderer, mapData, bgMusic;
 
@@ -70,19 +75,7 @@ function init() {
         if (!gameStarted || doorOpened) return;
 
         if (event.key.toLowerCase() === 'e' && !isUIOpen) {
-            const playerPos = getPlayerPosition();
-
-            if (
-                mapData.pinpadObj &&
-                playerPos.distanceTo(mapData.pinpadObj.position) < 250
-            ) {
-                abrirPinpad();
-            } else if (
-                mapData.escapeDoor &&
-                playerPos.distanceTo(mapData.escapeDoor.position) < 250
-            ) {
-                mostrarAlertaPuerta();
-            }
+            intentarInteractuar();
         }
 
         if (event.key === 'Escape' && isUIOpen) {
@@ -131,54 +124,13 @@ function init() {
 
     if (pinpadEnter) {
         pinpadEnter.addEventListener('click', () => {
-            const correcta = mapData.codigoSecreto.join('');
-            const msg = document.getElementById('pinpad-msg');
-
-            if (!msg) return;
-
-            if (currentPin === correcta) {
-                msg.innerText = 'CÓDIGO ACEPTADO';
-                msg.style.color = '#4ade80';
-
-                reproducirSonido(sfxSuccess);
-
-                setTimeout(() => {
-                    cerrarPinpad();
-
-                    if (mapData.escapeDoor) {
-                        mapData.escapeDoor.visible = false;
-                    }
-
-                    if (mapData.doorGridIndex) {
-                        mapData.grid[mapData.doorGridIndex.r][mapData.doorGridIndex.c] = 0;
-                    }
-
-                    if (mapData.doorBarrier) {
-                        const index = mapData.obstacles.indexOf(mapData.doorBarrier);
-
-                        if (index > -1) {
-                            mapData.obstacles.splice(index, 1);
-                        }
-
-                        if (mapData.doorBarrier.parent) {
-                            mapData.doorBarrier.parent.remove(mapData.doorBarrier);
-                        }
-                    }
-
-                    doorOpened = true;
-                }, 1000);
-            } else {
-                msg.innerText = 'ERROR CAPA 8';
-                msg.style.color = '#ff2a5f';
-
-                currentPin = '';
-                actualizarPantallaPinpad();
-                reproducirSonido(sfxError);
-            }
+            validarCodigoPinpad();
         });
     }
 
     scene = new THREE.Scene();
+
+    scene.fog = new THREE.FogExp2(0xd8e8ff, 0.00028);
 
     camera = new THREE.PerspectiveCamera(
         60,
@@ -202,7 +154,19 @@ function init() {
 
     renderer.xr.enabled = true;
 
-    document.body.appendChild(VRButton.createButton(renderer));
+    const sessionInit = {
+        optionalFeatures: [
+            'local-floor',
+            'bounded-floor',
+            'hand-tracking',
+            'dom-overlay'
+        ],
+        domOverlay: {
+            root: document.body
+        }
+    };
+
+    document.body.appendChild(VRButton.createButton(renderer, sessionInit));
 
     const gameContainer = document.getElementById('game-container');
 
@@ -323,6 +287,78 @@ function init() {
     renderer.setAnimationLoop(animate);
 }
 
+function intentarInteractuar() {
+    if (!mapData || doorOpened) return;
+
+    const playerPos = getPlayerPosition();
+
+    const cercaDePinpad =
+        mapData.pinpadObj &&
+        playerPos.distanceTo(mapData.pinpadObj.position) < 260;
+
+    const cercaDePuerta =
+        mapData.escapeDoor &&
+        playerPos.distanceTo(mapData.escapeDoor.position) < 260;
+
+    if (cercaDePinpad) {
+        abrirPinpad();
+        return;
+    }
+
+    if (cercaDePuerta) {
+        mostrarAlertaPuerta();
+    }
+}
+
+function validarCodigoPinpad() {
+    if (!mapData) return;
+
+    const correcta = mapData.codigoSecreto.join('');
+    const msg = document.getElementById('pinpad-msg');
+
+    if (!msg) return;
+
+    if (currentPin === correcta) {
+        msg.innerText = 'CÓDIGO ACEPTADO';
+        msg.style.color = '#4ade80';
+
+        reproducirSonido(sfxSuccess);
+
+        setTimeout(() => {
+            cerrarPinpad();
+
+            if (mapData.escapeDoor) {
+                mapData.escapeDoor.visible = false;
+            }
+
+            if (mapData.doorGridIndex) {
+                mapData.grid[mapData.doorGridIndex.r][mapData.doorGridIndex.c] = 0;
+            }
+
+            if (mapData.doorBarrier) {
+                const index = mapData.obstacles.indexOf(mapData.doorBarrier);
+
+                if (index > -1) {
+                    mapData.obstacles.splice(index, 1);
+                }
+
+                if (mapData.doorBarrier.parent) {
+                    mapData.doorBarrier.parent.remove(mapData.doorBarrier);
+                }
+            }
+
+            doorOpened = true;
+        }, 1000);
+    } else {
+        msg.innerText = 'ERROR CAPA 8';
+        msg.style.color = '#ff2a5f';
+
+        currentPin = '';
+        actualizarPantallaPinpad();
+        reproducirSonido(sfxError);
+    }
+}
+
 function reproducirSonido(audioObject) {
     if (audioObject && audioObject.buffer) {
         if (audioObject.isPlaying) {
@@ -354,6 +390,8 @@ function abrirPinpad() {
 
     if (pinpadUI) {
         pinpadUI.style.display = 'flex';
+        pinpadUI.style.zIndex = '99999';
+        pinpadUI.style.pointerEvents = 'auto';
     }
 }
 
@@ -381,6 +419,7 @@ function mostrarAlertaPuerta() {
 
     if (alerta) {
         alerta.style.display = 'block';
+        alerta.style.zIndex = '99999';
 
         clearTimeout(alertTimeout);
 
@@ -396,16 +435,20 @@ function animate() {
     if (mapData && gameStarted) {
         updatePlayer(delta, camera, mapData, renderer, isUIOpen);
 
+        if (!isUIOpen && consumeVRInteractPressed()) {
+            intentarInteractuar();
+        }
+
         const playerPos = getPlayerPosition();
 
         if (!isUIOpen && !doorOpened) {
             const cercaDePinpad =
                 mapData.pinpadObj &&
-                playerPos.distanceTo(mapData.pinpadObj.position) < 250;
+                playerPos.distanceTo(mapData.pinpadObj.position) < 260;
 
             const cercaDePuerta =
                 mapData.escapeDoor &&
-                playerPos.distanceTo(mapData.escapeDoor.position) < 250;
+                playerPos.distanceTo(mapData.escapeDoor.position) < 260;
 
             const prompt = document.getElementById('interact-prompt');
 
@@ -434,6 +477,7 @@ function animate() {
 
                 if (successScreen) {
                     successScreen.style.display = 'flex';
+                    successScreen.style.zIndex = '99999';
                 }
             }
         }
