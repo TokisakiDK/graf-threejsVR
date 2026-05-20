@@ -53,7 +53,6 @@ function randomSeguro() {
 }
 
 export function construirMundo(scene) {
-    // Aseguramos que la carga bloquee hasta terminar en GitHub Pages
     const texLoader = new THREE.TextureLoader(THREE.DefaultLoadingManager);
     const gltfLoader = new GLTFLoader(THREE.DefaultLoadingManager);
 
@@ -172,10 +171,6 @@ export function construirMundo(scene) {
     const mapIndex = Math.floor(randomSeguro() * catalogoMapas.length);
     const mapSelection = catalogoMapas[mapIndex];
     const mapa = mapSelection.grid;
-
-    mapState.mapName = mapSelection.name;
-    mapState.mapIndex = mapIndex;
-    mapState.mapTexture = mapSelection.texture;
 
     const texMuro = texLoader.load('assets/' + mapSelection.texture);
     texMuro.wrapS = THREE.RepeatWrapping;
