@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
-import { construirMundo } from './Labyrinth.js';
+
+import { construirMundo } from './Labyrinth.js?v=3';
+
 import {
     consumeVRConfirmPressed,
     consumeVRInteractPressed,
@@ -9,7 +11,7 @@ import {
     getVRNavAxes,
     initPlayer,
     updatePlayer
-} from './Player.js?v=20';
+} from './Player.js?v=21';
 
 let camera, scene, renderer, mapData, bgMusic;
 
@@ -18,6 +20,9 @@ let isUIOpen = false;
 let doorOpened = false;
 let successTriggered = false;
 let alertTimeout;
+
+let loadingFinished = false;
+let forcedStartShown = false;
 
 const clock = new THREE.Clock();
 
@@ -30,65 +35,12 @@ let vrNavCooldown = 0;
 init();
 
 function init() {
-    THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
-        const progress = (itemsLoaded / itemsTotal) * 100;
-
-        const progressBar = document.getElementById('progress-bar');
-        const loadingText = document.getElementById('loading-text');
-
-        if (progressBar) progressBar.style.width = progress + '%';
-        if (loadingText) loadingText.innerText = Math.floor(progress) + '%';
-    };
-
-    THREE.DefaultLoadingManager.onLoad = function () {
-        const loadingScreen = document.getElementById('loading-screen');
-        const startScreen = document.getElementById('start-screen');
-
-        if (loadingScreen) loadingScreen.style.display = 'none';
-        if (startScreen) startScreen.style.display = 'flex';
-    };
-
+    configurarLoadingManager();
     injectVRPinpadStyle();
-
-    const startBtn = document.getElementById('start-btn');
-
-    if (startBtn) {
-        startBtn.addEventListener('click', () => {
-            const startScreen = document.getElementById('start-screen');
-
-            if (startScreen) startScreen.style.display = 'none';
-
-            if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
-                bgMusic.play();
-            }
-
-            gameStarted = true;
-        });
-    }
-
-    document.addEventListener('keydown', (event) => {
-        if (!gameStarted || doorOpened) return;
-
-        if (event.key.toLowerCase() === 'e' && !isUIOpen) {
-            intentarInteractuar();
-        }
-
-        if (event.key === 'Escape' && isUIOpen) {
-            cerrarPinpad();
-        }
-    });
-
-    const pinpadClose = document.getElementById('pinpad-close');
-
-    if (pinpadClose) {
-        pinpadClose.addEventListener('click', cerrarPinpad);
-    }
-
-    configurarPinpad();
 
     scene = new THREE.Scene();
 
-    // Niebla
+    // Niebla suave para mejorar ambiente y rendimiento visual.
     scene.fog = new THREE.FogExp2(0xdbeafe, 0.00032);
 
     camera = new THREE.PerspectiveCamera(
@@ -102,7 +54,7 @@ function init() {
         antialias: true
     });
 
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     renderer.shadowMap.enabled = true;
@@ -113,19 +65,9 @@ function init() {
 
     renderer.xr.enabled = true;
 
-    document.body.appendChild(
-        VRButton.createButton(renderer, {
-            optionalFeatures: [
-                'local-floor',
-                'bounded-floor',
-                'hand-tracking',
-                'dom-overlay'
-            ],
-            domOverlay: {
-                root: document.body
-            }
-        })
-    );
+    const vrButton = VRButton.createButton(renderer);
+
+    document.body.appendChild(vrButton);
 
     const gameContainer = document.getElementById('game-container');
 
@@ -135,121 +77,163 @@ function init() {
         document.body.appendChild(renderer.domElement);
     }
 
-    const catalogoCielos = [
-        'assets/sky/sky_1.hdr',
-        'assets/sky/sky_2.hdr',
-        'assets/sky/sky_3.hdr',
-        'assets/sky/sky_4.hdr'
-    ];
+    configurarStartButton();
+    configurarTeclado();
+    configurarPinpad();
 
-    const cieloElegido = catalogoCielos[
-        Math.floor(Math.random() * catalogoCielos.length)
-    ];
+    cargarCieloHDR();
+    crearLuces();
+    configurarAudio();
 
-    const rgbeLoader = new RGBELoader(THREE.DefaultLoadingManager);
-
-    rgbeLoader.load(cieloElegido, (texture) => {
-        texture.mapping = THREE.EquirectangularReflectionMapping;
-
-        scene.background = texture;
-        scene.environment = texture;
-
-        const skyGeo = new THREE.SphereGeometry(4000, 32, 32);
-
-        const skyMat = new THREE.MeshBasicMaterial({
-            map: texture,
-            side: THREE.BackSide
-        });
-
-        const skySphere = new THREE.Mesh(skyGeo, skyMat);
-        scene.add(skySphere);
-    });
-
-    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambient);
-
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(500, 1000, 250);
-    sun.castShadow = true;
-    scene.add(sun);
-
-    const listener = new THREE.AudioListener();
-    camera.add(listener);
-
-    const catalogoAudio = [
-        'assets/bgm/dreamcore.wav',
-        'assets/bgm/dreamcore_2.wav',
-        'assets/bgm/dreamcore_3.wav',
-        'assets/bgm/dreamcore_4.wav'
-    ];
-
-    const pistaElegida = catalogoAudio[
-        Math.floor(Math.random() * catalogoAudio.length)
-    ];
-
-    bgMusic = new THREE.Audio(listener);
-
-    const audioLoader = new THREE.AudioLoader();
-
-    audioLoader.load(pistaElegida, (buffer) => {
-        bgMusic.setBuffer(buffer);
-        bgMusic.setLoop(true);
-        bgMusic.setVolume(0.4);
-    });
-
-    const portalSoundB = new THREE.Audio(listener);
-    const portalSoundP = new THREE.Audio(listener);
-
-    sfxPin = new THREE.Audio(listener);
-    sfxError = new THREE.Audio(listener);
-    sfxSuccess = new THREE.Audio(listener);
-
-    audioLoader.load('assets/affects/portal_b.wav', (buffer) => {
-        portalSoundB.setBuffer(buffer);
-        portalSoundB.setVolume(0.8);
-    });
-
-    audioLoader.load('assets/affects/portal_p.wav', (buffer) => {
-        portalSoundP.setBuffer(buffer);
-        portalSoundP.setVolume(0.8);
-    });
-
-    audioLoader.load('assets/affects/pin.wav', (buffer) => {
-        sfxPin.setBuffer(buffer);
-        sfxPin.setVolume(1.0);
-    });
-
-    audioLoader.load('assets/affects/error.wav', (buffer) => {
-        sfxError.setBuffer(buffer);
-        sfxError.setVolume(1.0);
-    });
-
-    audioLoader.load('assets/affects/pinpad.wav', (buffer) => {
-        sfxSuccess.setBuffer(buffer);
-        sfxSuccess.setVolume(1.0);
-    });
-
+    // Construimos el laberinto inmediatamente.
+    // Si algún modelo decorativo tarda, ya no dejamos bloqueado el inicio.
     mapData = construirMundo(scene);
 
     console.log('Mapa cargado:', mapData.mapName || 'Sin nombre');
+    console.log('Índice de mapa:', mapData.mapIndex);
     console.log('Código secreto:', mapData.codigoSecreto.join(''));
-
-    mapData.sfxPortalB = portalSoundB;
-    mapData.sfxPortalP = portalSoundP;
 
     initPlayer(scene, mapData.spawnPosition, renderer, camera);
 
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    window.addEventListener('resize', onResize);
 
     renderer.setAnimationLoop(animate);
+
+    // Desbloqueo de seguridad:
+    // En Quest algunos recursos pueden tardar mucho o fallar.
+    // Esto evita que el juego se quede congelado en "cargando recursos".
+    setTimeout(() => {
+        if (!loadingFinished) {
+            console.warn('Carga forzada: algunos recursos siguen pendientes o fallaron.');
+            mostrarPantallaInicioForzada();
+        }
+    }, 8000);
+}
+
+function configurarLoadingManager() {
+    THREE.DefaultLoadingManager.onStart = function (url, itemsLoaded, itemsTotal) {
+        console.log('Iniciando carga:', url, itemsLoaded, itemsTotal);
+    };
+
+    THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+        const progress = itemsTotal > 0 ? (itemsLoaded / itemsTotal) * 100 : 0;
+
+        const progressBar = document.getElementById('progress-bar');
+        const loadingText = document.getElementById('loading-text');
+
+        if (progressBar) {
+            progressBar.style.width = progress + '%';
+        }
+
+        if (loadingText) {
+            loadingText.innerText = Math.floor(progress) + '%';
+        }
+
+        console.log(`Cargando: ${url} (${itemsLoaded}/${itemsTotal})`);
+    };
+
+    THREE.DefaultLoadingManager.onLoad = function () {
+        console.log('Carga completa de recursos.');
+        loadingFinished = true;
+        mostrarPantallaInicio();
+    };
+
+    THREE.DefaultLoadingManager.onError = function (url) {
+        console.warn('Error cargando recurso:', url);
+
+        const loadingText = document.getElementById('loading-text');
+
+        if (loadingText) {
+            loadingText.innerText = 'Cargando con recursos faltantes...';
+        }
+    };
+}
+
+function mostrarPantallaInicio() {
+    if (forcedStartShown) return;
+
+    forcedStartShown = true;
+
+    const loadingScreen = document.getElementById('loading-screen');
+    const startScreen = document.getElementById('start-screen');
+
+    if (loadingScreen) {
+        loadingScreen.style.display = 'none';
+    }
+
+    if (startScreen) {
+        startScreen.style.display = 'flex';
+    }
+}
+
+function mostrarPantallaInicioForzada() {
+    if (forcedStartShown) return;
+
+    forcedStartShown = true;
+
+    const loadingScreen = document.getElementById('loading-screen');
+    const startScreen = document.getElementById('start-screen');
+    const loadingText = document.getElementById('loading-text');
+    const progressBar = document.getElementById('progress-bar');
+
+    if (loadingText) {
+        loadingText.innerText = 'Listo';
+    }
+
+    if (progressBar) {
+        progressBar.style.width = '100%';
+    }
+
+    if (loadingScreen) {
+        loadingScreen.style.display = 'none';
+    }
+
+    if (startScreen) {
+        startScreen.style.display = 'flex';
+    }
+}
+
+function configurarStartButton() {
+    const startBtn = document.getElementById('start-btn');
+
+    if (!startBtn) return;
+
+    startBtn.addEventListener('click', () => {
+        const startScreen = document.getElementById('start-screen');
+
+        if (startScreen) {
+            startScreen.style.display = 'none';
+        }
+
+        if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
+            bgMusic.play();
+        }
+
+        gameStarted = true;
+    });
+}
+
+function configurarTeclado() {
+    document.addEventListener('keydown', (event) => {
+        if (!gameStarted || doorOpened) return;
+
+        if (event.key.toLowerCase() === 'e' && !isUIOpen) {
+            intentarInteractuar();
+        }
+
+        if (event.key === 'Escape' && isUIOpen) {
+            cerrarPinpad();
+        }
+    });
 }
 
 function configurarPinpad() {
+    const pinpadClose = document.getElementById('pinpad-close');
+
+    if (pinpadClose) {
+        pinpadClose.addEventListener('click', cerrarPinpad);
+    }
+
     const botones = document.querySelectorAll('.pinpad-btn:not(.action-btn)');
 
     botones.forEach((btn) => {
@@ -286,6 +270,144 @@ function configurarPinpad() {
     if (pinpadEnter) {
         pinpadEnter.addEventListener('click', validarCodigoPinpad);
     }
+}
+
+function cargarCieloHDR() {
+    const catalogoCielos = [
+        'assets/sky/sky_1.hdr',
+        'assets/sky/sky_2.hdr',
+        'assets/sky/sky_3.hdr',
+        'assets/sky/sky_4.hdr'
+    ];
+
+    const cieloElegido = catalogoCielos[
+        Math.floor(Math.random() * catalogoCielos.length)
+    ];
+
+    const rgbeLoader = new RGBELoader(THREE.DefaultLoadingManager);
+
+    rgbeLoader.load(
+        cieloElegido,
+        (texture) => {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+
+            scene.background = texture;
+            scene.environment = texture;
+
+            const skyGeo = new THREE.SphereGeometry(4000, 32, 32);
+
+            const skyMat = new THREE.MeshBasicMaterial({
+                map: texture,
+                side: THREE.BackSide
+            });
+
+            const skySphere = new THREE.Mesh(skyGeo, skyMat);
+            scene.add(skySphere);
+        },
+        undefined,
+        (error) => {
+            console.warn('No se pudo cargar HDR. Usando color de fondo.', error);
+            scene.background = new THREE.Color(0xdbeafe);
+        }
+    );
+}
+
+function crearLuces() {
+    const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambient);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(500, 1000, 250);
+    sun.castShadow = true;
+
+    scene.add(sun);
+}
+
+function configurarAudio() {
+    const listener = new THREE.AudioListener();
+    camera.add(listener);
+
+    const audioLoader = new THREE.AudioLoader(THREE.DefaultLoadingManager);
+
+    const catalogoAudio = [
+        'assets/bgm/dreamcore.wav',
+        'assets/bgm/dreamcore_2.wav',
+        'assets/bgm/dreamcore_3.wav',
+        'assets/bgm/dreamcore_4.wav'
+    ];
+
+    const pistaElegida = catalogoAudio[
+        Math.floor(Math.random() * catalogoAudio.length)
+    ];
+
+    bgMusic = new THREE.Audio(listener);
+
+    cargarAudioSeguro(audioLoader, pistaElegida, (buffer) => {
+        bgMusic.setBuffer(buffer);
+        bgMusic.setLoop(true);
+        bgMusic.setVolume(0.4);
+    });
+
+    const portalSoundB = new THREE.Audio(listener);
+    const portalSoundP = new THREE.Audio(listener);
+
+    sfxPin = new THREE.Audio(listener);
+    sfxError = new THREE.Audio(listener);
+    sfxSuccess = new THREE.Audio(listener);
+
+    cargarAudioSeguro(audioLoader, 'assets/affects/portal_b.wav', (buffer) => {
+        portalSoundB.setBuffer(buffer);
+        portalSoundB.setVolume(0.8);
+    });
+
+    cargarAudioSeguro(audioLoader, 'assets/affects/portal_p.wav', (buffer) => {
+        portalSoundP.setBuffer(buffer);
+        portalSoundP.setVolume(0.8);
+    });
+
+    cargarAudioSeguro(audioLoader, 'assets/affects/pin.wav', (buffer) => {
+        sfxPin.setBuffer(buffer);
+        sfxPin.setVolume(1.0);
+    });
+
+    cargarAudioSeguro(audioLoader, 'assets/affects/error.wav', (buffer) => {
+        sfxError.setBuffer(buffer);
+        sfxError.setVolume(1.0);
+    });
+
+    cargarAudioSeguro(audioLoader, 'assets/affects/pinpad.wav', (buffer) => {
+        sfxSuccess.setBuffer(buffer);
+        sfxSuccess.setVolume(1.0);
+    });
+
+    // Se agregan aunque el audio falle.
+    // Así los portales siguen funcionando.
+    window.addEventListener('load', () => {
+        if (mapData) {
+            mapData.sfxPortalB = portalSoundB;
+            mapData.sfxPortalP = portalSoundP;
+        }
+    });
+
+    setTimeout(() => {
+        if (mapData) {
+            mapData.sfxPortalB = portalSoundB;
+            mapData.sfxPortalP = portalSoundP;
+        }
+    }, 1000);
+}
+
+function cargarAudioSeguro(audioLoader, ruta, onLoadCallback) {
+    audioLoader.load(
+        ruta,
+        (buffer) => {
+            onLoadCallback(buffer);
+        },
+        undefined,
+        (error) => {
+            console.warn('No se pudo cargar audio:', ruta, error);
+        }
+    );
 }
 
 function intentarInteractuar() {
@@ -428,6 +550,7 @@ function mostrarAlertaPuerta() {
         alerta.innerText = doorOpened
             ? 'PUERTA ABIERTA'
             : 'LA PUERTA ESTÁ BLOQUEADA. BUSCA EL PIN.';
+
         alerta.style.display = 'block';
         alerta.style.zIndex = '99999';
 
@@ -440,9 +563,12 @@ function mostrarAlertaPuerta() {
 }
 
 function actualizarMensajeInteraccion() {
+    const prompt = document.getElementById('interact-prompt');
+
+    if (!prompt) return;
+
     if (!mapData || isUIOpen || doorOpened) {
-        const prompt = document.getElementById('interact-prompt');
-        if (prompt) prompt.style.display = 'none';
+        prompt.style.display = 'none';
         return;
     }
 
@@ -455,10 +581,6 @@ function actualizarMensajeInteraccion() {
     const cercaDePuerta =
         mapData.escapeDoor &&
         playerPos.distanceTo(mapData.escapeDoor.position) < 280;
-
-    const prompt = document.getElementById('interact-prompt');
-
-    if (!prompt) return;
 
     if (cercaDePinpad) {
         prompt.innerText = 'GATILLO DERECHO / E: USAR PINPAD';
@@ -556,7 +678,6 @@ function actualizarPinpadVR(delta) {
 
         if (selectedButton) {
             selectedButton.click();
-            reproducirSonido(sfxPin);
         }
     }
 }
@@ -573,6 +694,13 @@ function injectVRPinpadStyle() {
     `;
 
     document.head.appendChild(style);
+}
+
+function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function animate() {
