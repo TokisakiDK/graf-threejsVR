@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
-
 import { construirMundo } from './Labyrinth.js';
-import { getPlayerPosition, initPlayer, updatePlayer } from './Player.js';
+import { getPlayerPosition, initPlayer, updatePlayer } from './Player.js?v=7';
 
 let camera, scene, renderer, mapData, bgMusic;
 
@@ -23,31 +22,56 @@ init();
 function init() {
     THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
         const progress = (itemsLoaded / itemsTotal) * 100;
-        document.getElementById('progress-bar').style.width = progress + '%';
-        document.getElementById('loading-text').innerText = Math.floor(progress) + '%';
+
+        const progressBar = document.getElementById('progress-bar');
+        const loadingText = document.getElementById('loading-text');
+
+        if (progressBar) {
+            progressBar.style.width = progress + '%';
+        }
+
+        if (loadingText) {
+            loadingText.innerText = Math.floor(progress) + '%';
+        }
     };
 
     THREE.DefaultLoadingManager.onLoad = function () {
-        document.getElementById('loading-screen').style.display = 'none';
-        document.getElementById('start-screen').style.display = 'flex';
-    };
+        const loadingScreen = document.getElementById('loading-screen');
+        const startScreen = document.getElementById('start-screen');
 
-    document.getElementById('start-btn').addEventListener('click', () => {
-        document.getElementById('start-screen').style.display = 'none';
-
-        if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
-            bgMusic.play();
+        if (loadingScreen) {
+            loadingScreen.style.display = 'none';
         }
 
-        gameStarted = true;
-    });
+        if (startScreen) {
+            startScreen.style.display = 'flex';
+        }
+    };
+
+    const startBtn = document.getElementById('start-btn');
+
+    if (startBtn) {
+        startBtn.addEventListener('click', () => {
+            const startScreen = document.getElementById('start-screen');
+
+            if (startScreen) {
+                startScreen.style.display = 'none';
+            }
+
+            if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
+                bgMusic.play();
+            }
+
+            gameStarted = true;
+        });
+    }
 
     document.addEventListener('keydown', (event) => {
         if (!gameStarted || doorOpened) return;
 
-        const playerPos = getPlayerPosition();
-
         if (event.key.toLowerCase() === 'e' && !isUIOpen) {
+            const playerPos = getPlayerPosition();
+
             if (
                 mapData.pinpadObj &&
                 playerPos.distanceTo(mapData.pinpadObj.position) < 250
@@ -66,7 +90,11 @@ function init() {
         }
     });
 
-    document.getElementById('pinpad-close').addEventListener('click', cerrarPinpad);
+    const pinpadClose = document.getElementById('pinpad-close');
+
+    if (pinpadClose) {
+        pinpadClose.addEventListener('click', cerrarPinpad);
+    }
 
     const botones = document.querySelectorAll('.pinpad-btn:not(.action-btn)');
 
@@ -82,60 +110,73 @@ function init() {
         });
     });
 
-    document.getElementById('pinpad-clear').addEventListener('click', () => {
-        currentPin = '';
-        actualizarPantallaPinpad();
-        reproducirSonido(sfxPin);
+    const pinpadClear = document.getElementById('pinpad-clear');
 
-        const msg = document.getElementById('pinpad-msg');
-        msg.innerText = 'INTRODUCE EL PIN';
-        msg.style.color = '#a0a0b0';
-    });
-
-    document.getElementById('pinpad-enter').addEventListener('click', () => {
-        const correcta = mapData.codigoSecreto.join('');
-        const msg = document.getElementById('pinpad-msg');
-
-        if (currentPin === correcta) {
-            msg.innerText = 'CÓDIGO ACEPTADO';
-            msg.style.color = '#4ade80';
-
-            reproducirSonido(sfxSuccess);
-
-            setTimeout(() => {
-                cerrarPinpad();
-
-                if (mapData.escapeDoor) {
-                    mapData.escapeDoor.visible = false;
-                }
-
-                if (mapData.doorGridIndex) {
-                    mapData.grid[mapData.doorGridIndex.r][mapData.doorGridIndex.c] = 0;
-                }
-
-                if (mapData.doorBarrier) {
-                    const index = mapData.obstacles.indexOf(mapData.doorBarrier);
-
-                    if (index > -1) {
-                        mapData.obstacles.splice(index, 1);
-                    }
-
-                    if (mapData.doorBarrier.parent) {
-                        mapData.doorBarrier.parent.remove(mapData.doorBarrier);
-                    }
-                }
-
-                doorOpened = true;
-            }, 1000);
-        } else {
-            msg.innerText = 'ERROR CAPA 8';
-            msg.style.color = '#ff2a5f';
-
+    if (pinpadClear) {
+        pinpadClear.addEventListener('click', () => {
             currentPin = '';
             actualizarPantallaPinpad();
-            reproducirSonido(sfxError);
-        }
-    });
+            reproducirSonido(sfxPin);
+
+            const msg = document.getElementById('pinpad-msg');
+
+            if (msg) {
+                msg.innerText = 'INTRODUCE EL PIN';
+                msg.style.color = '#a0a0b0';
+            }
+        });
+    }
+
+    const pinpadEnter = document.getElementById('pinpad-enter');
+
+    if (pinpadEnter) {
+        pinpadEnter.addEventListener('click', () => {
+            const correcta = mapData.codigoSecreto.join('');
+            const msg = document.getElementById('pinpad-msg');
+
+            if (!msg) return;
+
+            if (currentPin === correcta) {
+                msg.innerText = 'CÓDIGO ACEPTADO';
+                msg.style.color = '#4ade80';
+
+                reproducirSonido(sfxSuccess);
+
+                setTimeout(() => {
+                    cerrarPinpad();
+
+                    if (mapData.escapeDoor) {
+                        mapData.escapeDoor.visible = false;
+                    }
+
+                    if (mapData.doorGridIndex) {
+                        mapData.grid[mapData.doorGridIndex.r][mapData.doorGridIndex.c] = 0;
+                    }
+
+                    if (mapData.doorBarrier) {
+                        const index = mapData.obstacles.indexOf(mapData.doorBarrier);
+
+                        if (index > -1) {
+                            mapData.obstacles.splice(index, 1);
+                        }
+
+                        if (mapData.doorBarrier.parent) {
+                            mapData.doorBarrier.parent.remove(mapData.doorBarrier);
+                        }
+                    }
+
+                    doorOpened = true;
+                }, 1000);
+            } else {
+                msg.innerText = 'ERROR CAPA 8';
+                msg.style.color = '#ff2a5f';
+
+                currentPin = '';
+                actualizarPantallaPinpad();
+                reproducirSonido(sfxError);
+            }
+        });
+    }
 
     scene = new THREE.Scene();
 
@@ -146,7 +187,10 @@ function init() {
         5000
     );
 
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({
+        antialias: true
+    });
+
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -159,7 +203,14 @@ function init() {
     renderer.xr.enabled = true;
 
     document.body.appendChild(VRButton.createButton(renderer));
-    document.getElementById('game-container').appendChild(renderer.domElement);
+
+    const gameContainer = document.getElementById('game-container');
+
+    if (gameContainer) {
+        gameContainer.appendChild(renderer.domElement);
+    } else {
+        document.body.appendChild(renderer.domElement);
+    }
 
     const catalogoCielos = [
         'assets/sky/sky_1.hdr',
@@ -288,21 +339,41 @@ function abrirPinpad() {
 
     actualizarPantallaPinpad();
 
-    document.getElementById('pinpad-msg').innerText = 'INTRODUCE EL PIN';
-    document.getElementById('pinpad-msg').style.color = '#a0a0b0';
+    const msg = document.getElementById('pinpad-msg');
+    const prompt = document.getElementById('interact-prompt');
+    const pinpadUI = document.getElementById('pinpad-ui');
 
-    document.getElementById('interact-prompt').style.display = 'none';
-    document.getElementById('pinpad-ui').style.display = 'flex';
+    if (msg) {
+        msg.innerText = 'INTRODUCE EL PIN';
+        msg.style.color = '#a0a0b0';
+    }
+
+    if (prompt) {
+        prompt.style.display = 'none';
+    }
+
+    if (pinpadUI) {
+        pinpadUI.style.display = 'flex';
+    }
 }
 
 function cerrarPinpad() {
     isUIOpen = false;
-    document.getElementById('pinpad-ui').style.display = 'none';
+
+    const pinpadUI = document.getElementById('pinpad-ui');
+
+    if (pinpadUI) {
+        pinpadUI.style.display = 'none';
+    }
 }
 
 function actualizarPantallaPinpad() {
     const displayStr = currentPin.padEnd(4, '-');
-    document.getElementById('pinpad-screen').innerText = displayStr;
+    const screen = document.getElementById('pinpad-screen');
+
+    if (screen) {
+        screen.innerText = displayStr;
+    }
 }
 
 function mostrarAlertaPuerta() {
@@ -358,7 +429,12 @@ function animate() {
 
             if (distToExit < 200) {
                 successTriggered = true;
-                document.getElementById('success-screen').style.display = 'flex';
+
+                const successScreen = document.getElementById('success-screen');
+
+                if (successScreen) {
+                    successScreen.style.display = 'flex';
+                }
             }
         }
     }
