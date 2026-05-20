@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-import { construirMundo } from './Labyrinth.js?v=3';
+import { construirMundo, iniciarVideosLaberinto } from './Labyrinth.js?v=30';
 
 import {
     consumeVRConfirmPressed,
@@ -11,7 +11,7 @@ import {
     getVRNavAxes,
     initPlayer,
     updatePlayer
-} from './Player.js?v=21';
+} from './Player.js?v=30';
 
 let camera, scene, renderer, mapData, bgMusic;
 
@@ -20,9 +20,6 @@ let isUIOpen = false;
 let doorOpened = false;
 let successTriggered = false;
 let alertTimeout;
-
-let loadingFinished = false;
-let forcedStartShown = false;
 
 const clock = new THREE.Clock();
 
@@ -35,12 +32,10 @@ let vrNavCooldown = 0;
 init();
 
 function init() {
-    configurarLoadingManager();
+    prepararPantallaCargaSegura();
     injectVRPinpadStyle();
 
     scene = new THREE.Scene();
-
-    // Niebla suave para mejorar ambiente y rendimiento visual.
     scene.fog = new THREE.FogExp2(0xdbeafe, 0.00032);
 
     camera = new THREE.PerspectiveCamera(
@@ -54,7 +49,7 @@ function init() {
         antialias: true
     });
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     renderer.shadowMap.enabled = true;
@@ -65,9 +60,18 @@ function init() {
 
     renderer.xr.enabled = true;
 
-    const vrButton = VRButton.createButton(renderer);
-
-    document.body.appendChild(vrButton);
+    document.body.appendChild(
+        VRButton.createButton(renderer, {
+            optionalFeatures: [
+                'local-floor',
+                'bounded-floor',
+                'dom-overlay'
+            ],
+            domOverlay: {
+                root: document.body
+            }
+        })
+    );
 
     const gameContainer = document.getElementById('game-container');
 
@@ -77,83 +81,54 @@ function init() {
         document.body.appendChild(renderer.domElement);
     }
 
-    configurarStartButton();
-    configurarTeclado();
-    configurarPinpad();
-
-    cargarCieloHDR();
+    cargarCielo();
     crearLuces();
-    configurarAudio();
+    crearAudio();
 
-    // Construimos el laberinto inmediatamente.
-    // Si algún modelo decorativo tarda, ya no dejamos bloqueado el inicio.
     mapData = construirMundo(scene);
 
-    console.log('Mapa cargado:', mapData.mapName || 'Sin nombre');
-    console.log('Índice de mapa:', mapData.mapIndex);
+    console.log('Mapa cargado:', mapData.mapName);
     console.log('Código secreto:', mapData.codigoSecreto.join(''));
 
     initPlayer(scene, mapData.spawnPosition, renderer, camera);
 
-    window.addEventListener('resize', onResize);
+    configurarInicio();
+    configurarTeclado();
+    configurarPinpad();
+
+    window.addEventListener('resize', onWindowResize);
+
+    renderer.xr.addEventListener('sessionstart', () => {
+        iniciarVideosLaberinto();
+    });
 
     renderer.setAnimationLoop(animate);
 
-    // Desbloqueo de seguridad:
-    // En Quest algunos recursos pueden tardar mucho o fallar.
-    // Esto evita que el juego se quede congelado en "cargando recursos".
-    setTimeout(() => {
-        if (!loadingFinished) {
-            console.warn('Carga forzada: algunos recursos siguen pendientes o fallaron.');
-            mostrarPantallaInicioForzada();
-        }
-    }, 8000);
+    mostrarPantallaInicio();
 }
 
-function configurarLoadingManager() {
-    THREE.DefaultLoadingManager.onStart = function (url, itemsLoaded, itemsTotal) {
-        console.log('Iniciando carga:', url, itemsLoaded, itemsTotal);
-    };
-
+function prepararPantallaCargaSegura() {
     THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
-        const progress = itemsTotal > 0 ? (itemsLoaded / itemsTotal) * 100 : 0;
+        const progress = itemsTotal > 0 ? (itemsLoaded / itemsTotal) * 100 : 100;
 
         const progressBar = document.getElementById('progress-bar');
         const loadingText = document.getElementById('loading-text');
 
         if (progressBar) {
-            progressBar.style.width = progress + '%';
+            progressBar.style.width = Math.min(progress, 100) + '%';
         }
 
         if (loadingText) {
-            loadingText.innerText = Math.floor(progress) + '%';
+            loadingText.innerText = Math.floor(Math.min(progress, 100)) + '%';
         }
-
-        console.log(`Cargando: ${url} (${itemsLoaded}/${itemsTotal})`);
-    };
-
-    THREE.DefaultLoadingManager.onLoad = function () {
-        console.log('Carga completa de recursos.');
-        loadingFinished = true;
-        mostrarPantallaInicio();
     };
 
     THREE.DefaultLoadingManager.onError = function (url) {
-        console.warn('Error cargando recurso:', url);
-
-        const loadingText = document.getElementById('loading-text');
-
-        if (loadingText) {
-            loadingText.innerText = 'Cargando con recursos faltantes...';
-        }
+        console.warn('No se pudo cargar un recurso, pero el juego continuará:', url);
     };
 }
 
 function mostrarPantallaInicio() {
-    if (forcedStartShown) return;
-
-    forcedStartShown = true;
-
     const loadingScreen = document.getElementById('loading-screen');
     const startScreen = document.getElementById('start-screen');
 
@@ -166,34 +141,7 @@ function mostrarPantallaInicio() {
     }
 }
 
-function mostrarPantallaInicioForzada() {
-    if (forcedStartShown) return;
-
-    forcedStartShown = true;
-
-    const loadingScreen = document.getElementById('loading-screen');
-    const startScreen = document.getElementById('start-screen');
-    const loadingText = document.getElementById('loading-text');
-    const progressBar = document.getElementById('progress-bar');
-
-    if (loadingText) {
-        loadingText.innerText = 'Listo';
-    }
-
-    if (progressBar) {
-        progressBar.style.width = '100%';
-    }
-
-    if (loadingScreen) {
-        loadingScreen.style.display = 'none';
-    }
-
-    if (startScreen) {
-        startScreen.style.display = 'flex';
-    }
-}
-
-function configurarStartButton() {
+function configurarInicio() {
     const startBtn = document.getElementById('start-btn');
 
     if (!startBtn) return;
@@ -204,6 +152,8 @@ function configurarStartButton() {
         if (startScreen) {
             startScreen.style.display = 'none';
         }
+
+        iniciarVideosLaberinto();
 
         if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
             bgMusic.play();
@@ -272,7 +222,7 @@ function configurarPinpad() {
     }
 }
 
-function cargarCieloHDR() {
+function cargarCielo() {
     const catalogoCielos = [
         'assets/sky/sky_1.hdr',
         'assets/sky/sky_2.hdr',
@@ -284,7 +234,7 @@ function cargarCieloHDR() {
         Math.floor(Math.random() * catalogoCielos.length)
     ];
 
-    const rgbeLoader = new RGBELoader(THREE.DefaultLoadingManager);
+    const rgbeLoader = new RGBELoader();
 
     rgbeLoader.load(
         cieloElegido,
@@ -306,7 +256,7 @@ function cargarCieloHDR() {
         },
         undefined,
         (error) => {
-            console.warn('No se pudo cargar HDR. Usando color de fondo.', error);
+            console.warn('No se pudo cargar el HDR, usando color de fondo.', error);
             scene.background = new THREE.Color(0xdbeafe);
         }
     );
@@ -319,15 +269,14 @@ function crearLuces() {
     const sun = new THREE.DirectionalLight(0xffffff, 1.5);
     sun.position.set(500, 1000, 250);
     sun.castShadow = true;
-
     scene.add(sun);
 }
 
-function configurarAudio() {
+function crearAudio() {
     const listener = new THREE.AudioListener();
     camera.add(listener);
 
-    const audioLoader = new THREE.AudioLoader(THREE.DefaultLoadingManager);
+    const audioLoader = new THREE.AudioLoader();
 
     const catalogoAudio = [
         'assets/bgm/dreamcore.wav',
@@ -342,11 +291,18 @@ function configurarAudio() {
 
     bgMusic = new THREE.Audio(listener);
 
-    cargarAudioSeguro(audioLoader, pistaElegida, (buffer) => {
-        bgMusic.setBuffer(buffer);
-        bgMusic.setLoop(true);
-        bgMusic.setVolume(0.4);
-    });
+    audioLoader.load(
+        pistaElegida,
+        (buffer) => {
+            bgMusic.setBuffer(buffer);
+            bgMusic.setLoop(true);
+            bgMusic.setVolume(0.4);
+        },
+        undefined,
+        () => {
+            console.warn('No se pudo cargar música de fondo.');
+        }
+    );
 
     const portalSoundB = new THREE.Audio(listener);
     const portalSoundP = new THREE.Audio(listener);
@@ -355,33 +311,12 @@ function configurarAudio() {
     sfxError = new THREE.Audio(listener);
     sfxSuccess = new THREE.Audio(listener);
 
-    cargarAudioSeguro(audioLoader, 'assets/affects/portal_b.wav', (buffer) => {
-        portalSoundB.setBuffer(buffer);
-        portalSoundB.setVolume(0.8);
-    });
+    cargarSFX(audioLoader, portalSoundB, 'assets/affects/portal_b.wav', 0.8);
+    cargarSFX(audioLoader, portalSoundP, 'assets/affects/portal_p.wav', 0.8);
+    cargarSFX(audioLoader, sfxPin, 'assets/affects/pin.wav', 1.0);
+    cargarSFX(audioLoader, sfxError, 'assets/affects/error.wav', 1.0);
+    cargarSFX(audioLoader, sfxSuccess, 'assets/affects/pinpad.wav', 1.0);
 
-    cargarAudioSeguro(audioLoader, 'assets/affects/portal_p.wav', (buffer) => {
-        portalSoundP.setBuffer(buffer);
-        portalSoundP.setVolume(0.8);
-    });
-
-    cargarAudioSeguro(audioLoader, 'assets/affects/pin.wav', (buffer) => {
-        sfxPin.setBuffer(buffer);
-        sfxPin.setVolume(1.0);
-    });
-
-    cargarAudioSeguro(audioLoader, 'assets/affects/error.wav', (buffer) => {
-        sfxError.setBuffer(buffer);
-        sfxError.setVolume(1.0);
-    });
-
-    cargarAudioSeguro(audioLoader, 'assets/affects/pinpad.wav', (buffer) => {
-        sfxSuccess.setBuffer(buffer);
-        sfxSuccess.setVolume(1.0);
-    });
-
-    // Se agregan aunque el audio falle.
-    // Así los portales siguen funcionando.
     window.addEventListener('load', () => {
         if (mapData) {
             mapData.sfxPortalB = portalSoundB;
@@ -394,18 +329,19 @@ function configurarAudio() {
             mapData.sfxPortalB = portalSoundB;
             mapData.sfxPortalP = portalSoundP;
         }
-    }, 1000);
+    }, 200);
 }
 
-function cargarAudioSeguro(audioLoader, ruta, onLoadCallback) {
-    audioLoader.load(
+function cargarSFX(loader, audioObject, ruta, volumen) {
+    loader.load(
         ruta,
         (buffer) => {
-            onLoadCallback(buffer);
+            audioObject.setBuffer(buffer);
+            audioObject.setVolume(volumen);
         },
         undefined,
-        (error) => {
-            console.warn('No se pudo cargar audio:', ruta, error);
+        () => {
+            console.warn('No se pudo cargar audio:', ruta);
         }
     );
 }
@@ -417,11 +353,11 @@ function intentarInteractuar() {
 
     const cercaDePinpad =
         mapData.pinpadObj &&
-        playerPos.distanceTo(mapData.pinpadObj.position) < 280;
+        playerPos.distanceTo(mapData.pinpadObj.position) < 300;
 
     const cercaDePuerta =
         mapData.escapeDoor &&
-        playerPos.distanceTo(mapData.escapeDoor.position) < 280;
+        playerPos.distanceTo(mapData.escapeDoor.position) < 300;
 
     if (cercaDePinpad) {
         abrirPinpad();
@@ -563,12 +499,13 @@ function mostrarAlertaPuerta() {
 }
 
 function actualizarMensajeInteraccion() {
-    const prompt = document.getElementById('interact-prompt');
-
-    if (!prompt) return;
-
     if (!mapData || isUIOpen || doorOpened) {
-        prompt.style.display = 'none';
+        const prompt = document.getElementById('interact-prompt');
+
+        if (prompt) {
+            prompt.style.display = 'none';
+        }
+
         return;
     }
 
@@ -576,11 +513,15 @@ function actualizarMensajeInteraccion() {
 
     const cercaDePinpad =
         mapData.pinpadObj &&
-        playerPos.distanceTo(mapData.pinpadObj.position) < 280;
+        playerPos.distanceTo(mapData.pinpadObj.position) < 300;
 
     const cercaDePuerta =
         mapData.escapeDoor &&
-        playerPos.distanceTo(mapData.escapeDoor.position) < 280;
+        playerPos.distanceTo(mapData.escapeDoor.position) < 300;
+
+    const prompt = document.getElementById('interact-prompt');
+
+    if (!prompt) return;
 
     if (cercaDePinpad) {
         prompt.innerText = 'GATILLO DERECHO / E: USAR PINPAD';
@@ -605,8 +546,13 @@ function getPinpadButtonsVR() {
 
     numericButtons.forEach((btn) => buttons.push(btn));
 
-    if (clearButton) buttons.push(clearButton);
-    if (enterButton) buttons.push(enterButton);
+    if (clearButton) {
+        buttons.push(clearButton);
+    }
+
+    if (enterButton) {
+        buttons.push(enterButton);
+    }
 
     return buttons;
 }
@@ -624,8 +570,13 @@ function actualizarSeleccionPinpadVR() {
 
     if (buttons.length === 0) return;
 
-    if (selectedPinpadIndex < 0) selectedPinpadIndex = 0;
-    if (selectedPinpadIndex >= buttons.length) selectedPinpadIndex = buttons.length - 1;
+    if (selectedPinpadIndex < 0) {
+        selectedPinpadIndex = 0;
+    }
+
+    if (selectedPinpadIndex >= buttons.length) {
+        selectedPinpadIndex = buttons.length - 1;
+    }
 
     buttons.forEach((btn, index) => {
         btn.classList.toggle('vr-pinpad-selected', index === selectedPinpadIndex);
@@ -649,7 +600,6 @@ function actualizarPinpadVR(delta) {
     if (buttons.length === 0) return;
 
     const axes = getVRNavAxes();
-
     const cols = 3;
 
     if (vrNavCooldown <= 0) {
@@ -667,8 +617,13 @@ function actualizarPinpadVR(delta) {
             vrNavCooldown = 0.22;
         }
 
-        if (selectedPinpadIndex < 0) selectedPinpadIndex = 0;
-        if (selectedPinpadIndex >= buttons.length) selectedPinpadIndex = buttons.length - 1;
+        if (selectedPinpadIndex < 0) {
+            selectedPinpadIndex = 0;
+        }
+
+        if (selectedPinpadIndex >= buttons.length) {
+            selectedPinpadIndex = buttons.length - 1;
+        }
 
         actualizarSeleccionPinpadVR();
     }
@@ -696,7 +651,7 @@ function injectVRPinpadStyle() {
     document.head.appendChild(style);
 }
 
-function onResize() {
+function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
 

@@ -232,18 +232,17 @@ function readVRControls(renderer) {
             vrInput.leftX = applyDeadzone(stick.x);
             vrInput.leftY = applyDeadzone(stick.y);
 
-            // Gatillo izquierdo para correr
             vrInput.running = isButtonPressed(buttons, 0);
         }
 
         if (source.handedness === 'right') {
             vrInput.rightX = applyDeadzone(stick.x);
 
-            // Gatillo derecho para interactuar
             vrInput.interactNow = isButtonPressed(buttons, 0);
 
-            // Botón A para presionar en pinpad
-            vrInput.confirmNow = isButtonPressed(buttons, 4);
+            vrInput.confirmNow =
+                isButtonPressed(buttons, 4) ||
+                isButtonPressed(buttons, 5);
         }
     }
 }

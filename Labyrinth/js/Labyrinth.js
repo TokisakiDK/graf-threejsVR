@@ -8,12 +8,23 @@ function crearTexturaDeVideo(ruta) {
     video.loop = true;
     video.muted = true;
     video.playsInline = true;
+    video.crossOrigin = 'anonymous';
+    video.preload = 'auto';
 
-    video.play().catch((e) => {
-        console.warn('Video pausado:', e);
+    const textura = new THREE.VideoTexture(video);
+    textura.colorSpace = THREE.SRGBColorSpace;
+
+    video.addEventListener('canplay', () => {
+        video.play().catch((e) => {
+            console.warn('Video pausado:', ruta, e);
+        });
     });
 
-    return new THREE.VideoTexture(video);
+    video.addEventListener('error', () => {
+        console.warn('No se pudo cargar video:', ruta);
+    });
+
+    return textura;
 }
 
 function crearTexturaGlifo(numero, posicionIndex) {
