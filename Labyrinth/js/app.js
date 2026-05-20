@@ -2,16 +2,20 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-import { construirMundo, iniciarVideosLaberinto } from './Labyrinth.js?v=30';
+import {
+    construirMundo,
+    iniciarVideosLaberinto
+} from './Labyrinth.js?v=40';
 
 import {
+    consumeVRCancelPressed,
     consumeVRConfirmPressed,
     consumeVRInteractPressed,
     getPlayerPosition,
     getVRNavAxes,
     initPlayer,
     updatePlayer
-} from './Player.js?v=30';
+} from './Player.js?v=40';
 
 let camera, scene, renderer, mapData, bgMusic;
 
@@ -26,14 +30,18 @@ const clock = new THREE.Clock();
 let currentPin = '';
 let sfxPin, sfxError, sfxSuccess;
 
-let selectedPinpadIndex = 0;
-let vrNavCooldown = 0;
+const vrPinpad = {
+    group: null,
+    buttons: [],
+    selectedIndex: 0,
+    navCooldown: 0,
+    open: false
+};
 
 init();
 
 function init() {
     prepararPantallaCargaSegura();
-    injectVRPinpadStyle();
 
     scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0xdbeafe, 0.00032);
@@ -64,12 +72,8 @@ function init() {
         VRButton.createButton(renderer, {
             optionalFeatures: [
                 'local-floor',
-                'bounded-floor',
-                'dom-overlay'
-            ],
-            domOverlay: {
-                root: document.body
-            }
+                'bounded-floor'
+            ]
         })
     );
 
@@ -92,15 +96,28 @@ function init() {
 
     initPlayer(scene, mapData.spawnPosition, renderer, camera);
 
+    crearPinpadVR3D();
+
     configurarInicio();
     configurarTeclado();
-    configurarPinpad();
-
-    window.addEventListener('resize', onWindowResize);
+    configurarPinpadHTML();
 
     renderer.xr.addEventListener('sessionstart', () => {
-        iniciarVideosLaberinto();
+        iniciarJuego();
     });
+
+    renderer.xr.addEventListener('sessionend', () => {
+        cerrarPinpadVR();
+        gameStarted = false;
+
+        const startScreen = document.getElementById('start-screen');
+
+        if (startScreen) {
+            startScreen.style.display = 'flex';
+        }
+    });
+
+    window.addEventListener('resize', onWindowResize);
 
     renderer.setAnimationLoop(animate);
 
@@ -147,20 +164,24 @@ function configurarInicio() {
     if (!startBtn) return;
 
     startBtn.addEventListener('click', () => {
-        const startScreen = document.getElementById('start-screen');
-
-        if (startScreen) {
-            startScreen.style.display = 'none';
-        }
-
-        iniciarVideosLaberinto();
-
-        if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
-            bgMusic.play();
-        }
-
-        gameStarted = true;
+        iniciarJuego();
     });
+}
+
+function iniciarJuego() {
+    const startScreen = document.getElementById('start-screen');
+
+    if (startScreen) {
+        startScreen.style.display = 'none';
+    }
+
+    iniciarVideosLaberinto();
+
+    gameStarted = true;
+
+    if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
+        bgMusic.play();
+    }
 }
 
 function configurarTeclado() {
@@ -172,16 +193,17 @@ function configurarTeclado() {
         }
 
         if (event.key === 'Escape' && isUIOpen) {
-            cerrarPinpad();
+            cerrarPinpadHTML();
+            cerrarPinpadVR();
         }
     });
 }
 
-function configurarPinpad() {
+function configurarPinpadHTML() {
     const pinpadClose = document.getElementById('pinpad-close');
 
     if (pinpadClose) {
-        pinpadClose.addEventListener('click', cerrarPinpad);
+        pinpadClose.addEventListener('click', cerrarPinpadHTML);
     }
 
     const botones = document.querySelectorAll('.pinpad-btn:not(.action-btn)');
@@ -192,7 +214,7 @@ function configurarPinpad() {
 
             if (numero !== 'C' && numero !== 'E' && currentPin.length < 4) {
                 currentPin += numero;
-                actualizarPantallaPinpad();
+                actualizarPantallaPinpadHTML();
                 reproducirSonido(sfxPin);
             }
         });
@@ -203,7 +225,7 @@ function configurarPinpad() {
     if (pinpadClear) {
         pinpadClear.addEventListener('click', () => {
             currentPin = '';
-            actualizarPantallaPinpad();
+            actualizarPantallaPinpadHTML();
             reproducirSonido(sfxPin);
 
             const msg = document.getElementById('pinpad-msg');
@@ -255,8 +277,7 @@ function cargarCielo() {
             scene.add(skySphere);
         },
         undefined,
-        (error) => {
-            console.warn('No se pudo cargar el HDR, usando color de fondo.', error);
+        () => {
             scene.background = new THREE.Color(0xdbeafe);
         }
     );
@@ -297,10 +318,14 @@ function crearAudio() {
             bgMusic.setBuffer(buffer);
             bgMusic.setLoop(true);
             bgMusic.setVolume(0.4);
+
+            if (gameStarted && !bgMusic.isPlaying) {
+                bgMusic.play();
+            }
         },
         undefined,
         () => {
-            console.warn('No se pudo cargar música de fondo.');
+            console.warn('No se pudo cargar la música de fondo.');
         }
     );
 
@@ -316,13 +341,6 @@ function crearAudio() {
     cargarSFX(audioLoader, sfxPin, 'assets/affects/pin.wav', 1.0);
     cargarSFX(audioLoader, sfxError, 'assets/affects/error.wav', 1.0);
     cargarSFX(audioLoader, sfxSuccess, 'assets/affects/pinpad.wav', 1.0);
-
-    window.addEventListener('load', () => {
-        if (mapData) {
-            mapData.sfxPortalB = portalSoundB;
-            mapData.sfxPortalP = portalSoundP;
-        }
-    });
 
     setTimeout(() => {
         if (mapData) {
@@ -346,21 +364,68 @@ function cargarSFX(loader, audioObject, ruta, volumen) {
     );
 }
 
+function estaEnVR() {
+    return renderer && renderer.xr && renderer.xr.isPresenting;
+}
+
+function obtenerPosicionPinpad() {
+    if (mapData.pinpadObj) {
+        return mapData.pinpadObj.position;
+    }
+
+    const logical = buscarPosicionEnGrid(5);
+
+    return logical;
+}
+
+function obtenerPosicionPuerta() {
+    if (mapData.doorPos) {
+        return mapData.doorPos;
+    }
+
+    return buscarPosicionEnGrid(2);
+}
+
+function buscarPosicionEnGrid(valorBuscado) {
+    if (!mapData || !mapData.grid) return null;
+
+    for (let f = 0; f < mapData.grid.length; f++) {
+        for (let c = 0; c < mapData.grid[f].length; c++) {
+            if (mapData.grid[f][c] === valorBuscado) {
+                const x = c * mapData.tileSize - mapData.offset;
+                const z = f * mapData.tileSize - mapData.offset;
+
+                return new THREE.Vector3(x, 0, z);
+            }
+        }
+    }
+
+    return null;
+}
+
 function intentarInteractuar() {
     if (!mapData || doorOpened) return;
 
     const playerPos = getPlayerPosition();
 
+    const pinpadPos = obtenerPosicionPinpad();
+    const puertaPos = obtenerPosicionPuerta();
+
     const cercaDePinpad =
-        mapData.pinpadObj &&
-        playerPos.distanceTo(mapData.pinpadObj.position) < 300;
+        pinpadPos &&
+        playerPos.distanceTo(pinpadPos) < 330;
 
     const cercaDePuerta =
-        mapData.escapeDoor &&
-        playerPos.distanceTo(mapData.escapeDoor.position) < 300;
+        puertaPos &&
+        playerPos.distanceTo(puertaPos) < 330;
 
     if (cercaDePinpad) {
-        abrirPinpad();
+        if (estaEnVR()) {
+            abrirPinpadVR();
+        } else {
+            abrirPinpadHTML();
+        }
+
         return;
     }
 
@@ -373,49 +438,66 @@ function validarCodigoPinpad() {
     if (!mapData) return;
 
     const correcta = mapData.codigoSecreto.join('');
-    const msg = document.getElementById('pinpad-msg');
-
-    if (!msg) return;
 
     if (currentPin === correcta) {
-        msg.innerText = 'CÓDIGO ACEPTADO';
-        msg.style.color = '#4ade80';
-
         reproducirSonido(sfxSuccess);
+        abrirPuerta();
 
-        setTimeout(() => {
-            cerrarPinpad();
+        if (estaEnVR()) {
+            actualizarTextoPinpadVR('CÓDIGO ACEPTADO');
+            setTimeout(cerrarPinpadVR, 900);
+        } else {
+            const msg = document.getElementById('pinpad-msg');
 
-            if (mapData.escapeDoor) {
-                mapData.escapeDoor.visible = false;
+            if (msg) {
+                msg.innerText = 'CÓDIGO ACEPTADO';
+                msg.style.color = '#4ade80';
             }
 
-            if (mapData.doorGridIndex) {
-                mapData.grid[mapData.doorGridIndex.r][mapData.doorGridIndex.c] = 0;
-            }
-
-            if (mapData.doorBarrier) {
-                const index = mapData.obstacles.indexOf(mapData.doorBarrier);
-
-                if (index > -1) {
-                    mapData.obstacles.splice(index, 1);
-                }
-
-                if (mapData.doorBarrier.parent) {
-                    mapData.doorBarrier.parent.remove(mapData.doorBarrier);
-                }
-            }
-
-            doorOpened = true;
-        }, 1000);
+            setTimeout(cerrarPinpadHTML, 900);
+        }
     } else {
-        msg.innerText = 'ERROR CAPA 8';
-        msg.style.color = '#ff2a5f';
-
         currentPin = '';
-        actualizarPantallaPinpad();
         reproducirSonido(sfxError);
+
+        if (estaEnVR()) {
+            actualizarTextoPinpadVR('ERROR');
+            actualizarPantallaPinpadVR();
+        } else {
+            const msg = document.getElementById('pinpad-msg');
+
+            if (msg) {
+                msg.innerText = 'ERROR CAPA 8';
+                msg.style.color = '#ff2a5f';
+            }
+
+            actualizarPantallaPinpadHTML();
+        }
     }
+}
+
+function abrirPuerta() {
+    if (mapData.escapeDoor) {
+        mapData.escapeDoor.visible = false;
+    }
+
+    if (mapData.doorGridIndex) {
+        mapData.grid[mapData.doorGridIndex.r][mapData.doorGridIndex.c] = 0;
+    }
+
+    if (mapData.doorBarrier) {
+        const index = mapData.obstacles.indexOf(mapData.doorBarrier);
+
+        if (index > -1) {
+            mapData.obstacles.splice(index, 1);
+        }
+
+        if (mapData.doorBarrier.parent) {
+            mapData.doorBarrier.parent.remove(mapData.doorBarrier);
+        }
+    }
+
+    doorOpened = true;
 }
 
 function reproducirSonido(audioObject) {
@@ -428,13 +510,11 @@ function reproducirSonido(audioObject) {
     }
 }
 
-function abrirPinpad() {
+function abrirPinpadHTML() {
     isUIOpen = true;
     currentPin = '';
-    selectedPinpadIndex = 0;
-    vrNavCooldown = 0;
 
-    actualizarPantallaPinpad();
+    actualizarPantallaPinpadHTML();
 
     const msg = document.getElementById('pinpad-msg');
     const prompt = document.getElementById('interact-prompt');
@@ -451,14 +531,10 @@ function abrirPinpad() {
 
     if (pinpadUI) {
         pinpadUI.style.display = 'flex';
-        pinpadUI.style.zIndex = '99999';
-        pinpadUI.style.pointerEvents = 'auto';
     }
-
-    actualizarSeleccionPinpadVR();
 }
 
-function cerrarPinpad() {
+function cerrarPinpadHTML() {
     isUIOpen = false;
 
     const pinpadUI = document.getElementById('pinpad-ui');
@@ -466,16 +542,340 @@ function cerrarPinpad() {
     if (pinpadUI) {
         pinpadUI.style.display = 'none';
     }
-
-    limpiarSeleccionPinpadVR();
 }
 
-function actualizarPantallaPinpad() {
+function actualizarPantallaPinpadHTML() {
     const displayStr = currentPin.padEnd(4, '-');
     const screen = document.getElementById('pinpad-screen');
 
     if (screen) {
         screen.innerText = displayStr;
+    }
+}
+
+function crearPinpadVR3D() {
+    const group = new THREE.Group();
+    group.name = 'VR_PINPAD_3D';
+    group.visible = false;
+
+    const panel = new THREE.Mesh(
+        new THREE.PlaneGeometry(520, 620),
+        new THREE.MeshBasicMaterial({
+            color: 0x050816,
+            transparent: true,
+            opacity: 0.94,
+            side: THREE.DoubleSide
+        })
+    );
+
+    panel.position.z = -2;
+    group.add(panel);
+
+    const title = crearTextoPlano('PINPAD', 180, 48, '#38bdf8');
+    title.position.set(0, 250, 1);
+    group.add(title);
+
+    const screen = crearTextoPlano('----', 260, 64, '#ffffff');
+    screen.name = 'VR_PINPAD_SCREEN';
+    screen.position.set(0, 175, 1);
+    group.add(screen);
+
+    const message = crearTextoPlano('A: PRESIONAR | B: CERRAR', 380, 34, '#a0a0b0');
+    message.name = 'VR_PINPAD_MSG';
+    message.position.set(0, 125, 1);
+    group.add(message);
+
+    const layout = [
+        ['1', '2', '3'],
+        ['4', '5', '6'],
+        ['7', '8', '9'],
+        ['C', '0', 'OK'],
+        ['SALIR', 'CERRAR', '']
+    ];
+
+    vrPinpad.buttons = [];
+
+    const startY = 55;
+    const gapX = 145;
+    const gapY = 82;
+
+    for (let r = 0; r < layout.length; r++) {
+        for (let c = 0; c < layout[r].length; c++) {
+            const label = layout[r][c];
+
+            if (!label) continue;
+
+            const button = crearBotonVR(label);
+
+            button.position.set(
+                (c - 1) * gapX,
+                startY - r * gapY,
+                8
+            );
+
+            button.userData.label = label;
+            button.userData.index = vrPinpad.buttons.length;
+
+            group.add(button);
+            vrPinpad.buttons.push(button);
+        }
+    }
+
+    scene.add(group);
+
+    vrPinpad.group = group;
+}
+
+function crearBotonVR(label) {
+    const group = new THREE.Group();
+
+    const bg = new THREE.Mesh(
+        new THREE.PlaneGeometry(label.length > 3 ? 128 : 110, 58),
+        new THREE.MeshBasicMaterial({
+            color: 0x111827,
+            transparent: true,
+            opacity: 0.96,
+            side: THREE.DoubleSide
+        })
+    );
+
+    bg.name = 'BG';
+    group.add(bg);
+
+    const text = crearTextoPlano(label, label.length > 3 ? 120 : 90, 36, '#ffffff');
+    text.position.z = 2;
+    group.add(text);
+
+    return group;
+}
+
+function crearTextoPlano(texto, width, height, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 256;
+
+    const ctx = canvas.getContext('2d');
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 64px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(width, height),
+        new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            side: THREE.DoubleSide
+        })
+    );
+
+    mesh.userData.canvas = canvas;
+    mesh.userData.context = ctx;
+    mesh.userData.texture = texture;
+    mesh.userData.color = color;
+
+    return mesh;
+}
+
+function cambiarTextoPlano(mesh, texto, color = null) {
+    if (!mesh || !mesh.userData.canvas) return;
+
+    const canvas = mesh.userData.canvas;
+    const ctx = mesh.userData.context;
+    const texture = mesh.userData.texture;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = color || mesh.userData.color || '#ffffff';
+    ctx.font = 'bold 64px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
+
+    texture.needsUpdate = true;
+}
+
+function abrirPinpadVR() {
+    if (!vrPinpad.group) return;
+
+    isUIOpen = true;
+    vrPinpad.open = true;
+    vrPinpad.selectedIndex = 0;
+    vrPinpad.navCooldown = 0;
+    currentPin = '';
+
+    posicionarPinpadFrenteACamara();
+
+    vrPinpad.group.visible = true;
+
+    actualizarPantallaPinpadVR();
+    actualizarTextoPinpadVR('A: PRESIONAR | B: CERRAR');
+    actualizarSeleccionPinpadVR();
+}
+
+function cerrarPinpadVR() {
+    isUIOpen = false;
+    vrPinpad.open = false;
+
+    if (vrPinpad.group) {
+        vrPinpad.group.visible = false;
+    }
+}
+
+function posicionarPinpadFrenteACamara() {
+    const camPos = new THREE.Vector3();
+    const camDir = new THREE.Vector3();
+
+    camera.getWorldPosition(camPos);
+    camera.getWorldDirection(camDir);
+
+    camDir.y = 0;
+    camDir.normalize();
+
+    const pos = camPos.clone().add(camDir.multiplyScalar(650));
+
+    vrPinpad.group.position.set(pos.x, camPos.y - 20, pos.z);
+    vrPinpad.group.lookAt(camPos);
+}
+
+function actualizarPantallaPinpadVR() {
+    const screen = vrPinpad.group.getObjectByName('VR_PINPAD_SCREEN');
+
+    if (screen) {
+        cambiarTextoPlano(screen, currentPin.padEnd(4, '-'), '#ffffff');
+    }
+}
+
+function actualizarTextoPinpadVR(texto) {
+    const msg = vrPinpad.group.getObjectByName('VR_PINPAD_MSG');
+
+    if (msg) {
+        cambiarTextoPlano(msg, texto, '#a0a0b0');
+    }
+}
+
+function actualizarSeleccionPinpadVR() {
+    vrPinpad.buttons.forEach((button, index) => {
+        const bg = button.getObjectByName('BG');
+
+        if (!bg) return;
+
+        if (index === vrPinpad.selectedIndex) {
+            bg.material.color.set(0x38bdf8);
+            button.scale.set(1.12, 1.12, 1.12);
+        } else {
+            bg.material.color.set(0x111827);
+            button.scale.set(1, 1, 1);
+        }
+    });
+}
+
+function presionarBotonPinpadVR(label) {
+    reproducirSonido(sfxPin);
+
+    if (/^[0-9]$/.test(label)) {
+        if (currentPin.length < 4) {
+            currentPin += label;
+            actualizarPantallaPinpadVR();
+        }
+
+        return;
+    }
+
+    if (label === 'C') {
+        currentPin = '';
+        actualizarPantallaPinpadVR();
+        actualizarTextoPinpadVR('A: PRESIONAR | B: CERRAR');
+        return;
+    }
+
+    if (label === 'OK') {
+        validarCodigoPinpad();
+        return;
+    }
+
+    if (label === 'CERRAR') {
+        cerrarPinpadVR();
+        return;
+    }
+
+    if (label === 'SALIR') {
+        salirDelJuego();
+    }
+}
+
+function actualizarPinpadVR(delta) {
+    if (!vrPinpad.open) return;
+
+    vrPinpad.navCooldown -= delta;
+
+    const axes = getVRNavAxes();
+    const cols = 3;
+
+    if (vrPinpad.navCooldown <= 0) {
+        if (axes.x > 0.55) {
+            vrPinpad.selectedIndex += 1;
+            vrPinpad.navCooldown = 0.22;
+        } else if (axes.x < -0.55) {
+            vrPinpad.selectedIndex -= 1;
+            vrPinpad.navCooldown = 0.22;
+        } else if (axes.y > 0.55) {
+            vrPinpad.selectedIndex += cols;
+            vrPinpad.navCooldown = 0.22;
+        } else if (axes.y < -0.55) {
+            vrPinpad.selectedIndex -= cols;
+            vrPinpad.navCooldown = 0.22;
+        }
+
+        if (vrPinpad.selectedIndex < 0) {
+            vrPinpad.selectedIndex = 0;
+        }
+
+        if (vrPinpad.selectedIndex >= vrPinpad.buttons.length) {
+            vrPinpad.selectedIndex = vrPinpad.buttons.length - 1;
+        }
+
+        actualizarSeleccionPinpadVR();
+    }
+
+    if (consumeVRConfirmPressed()) {
+        const button = vrPinpad.buttons[vrPinpad.selectedIndex];
+
+        if (button) {
+            presionarBotonPinpadVR(button.userData.label);
+        }
+    }
+
+    if (consumeVRCancelPressed()) {
+        cerrarPinpadVR();
+    }
+}
+
+function salirDelJuego() {
+    cerrarPinpadHTML();
+    cerrarPinpadVR();
+
+    gameStarted = false;
+
+    if (bgMusic && bgMusic.isPlaying) {
+        bgMusic.stop();
+    }
+
+    const session = renderer.xr.getSession();
+
+    if (session) {
+        session.end();
+    }
+
+    const startScreen = document.getElementById('start-screen');
+
+    if (startScreen) {
+        startScreen.style.display = 'flex';
     }
 }
 
@@ -499,156 +899,42 @@ function mostrarAlertaPuerta() {
 }
 
 function actualizarMensajeInteraccion() {
-    if (!mapData || isUIOpen || doorOpened) {
-        const prompt = document.getElementById('interact-prompt');
-
-        if (prompt) {
-            prompt.style.display = 'none';
-        }
-
-        return;
-    }
-
-    const playerPos = getPlayerPosition();
-
-    const cercaDePinpad =
-        mapData.pinpadObj &&
-        playerPos.distanceTo(mapData.pinpadObj.position) < 300;
-
-    const cercaDePuerta =
-        mapData.escapeDoor &&
-        playerPos.distanceTo(mapData.escapeDoor.position) < 300;
-
     const prompt = document.getElementById('interact-prompt');
 
     if (!prompt) return;
 
+    if (!mapData || isUIOpen || doorOpened) {
+        prompt.style.display = 'none';
+        return;
+    }
+
+    const playerPos = getPlayerPosition();
+    const pinpadPos = obtenerPosicionPinpad();
+    const puertaPos = obtenerPosicionPuerta();
+
+    const cercaDePinpad =
+        pinpadPos &&
+        playerPos.distanceTo(pinpadPos) < 330;
+
+    const cercaDePuerta =
+        puertaPos &&
+        playerPos.distanceTo(puertaPos) < 330;
+
     if (cercaDePinpad) {
-        prompt.innerText = 'GATILLO DERECHO / E: USAR PINPAD';
+        prompt.innerText = estaEnVR()
+            ? 'GATILLO DERECHO: USAR PINPAD'
+            : 'E: USAR PINPAD';
+
         prompt.style.display = 'block';
     } else if (cercaDePuerta) {
-        prompt.innerText = 'GATILLO DERECHO / E: REVISAR PUERTA';
+        prompt.innerText = estaEnVR()
+            ? 'GATILLO DERECHO: REVISAR PUERTA'
+            : 'E: REVISAR PUERTA';
+
         prompt.style.display = 'block';
     } else {
         prompt.style.display = 'none';
     }
-}
-
-function getPinpadButtonsVR() {
-    const numericButtons = Array.from(
-        document.querySelectorAll('.pinpad-btn:not(.action-btn)')
-    );
-
-    const clearButton = document.getElementById('pinpad-clear');
-    const enterButton = document.getElementById('pinpad-enter');
-
-    const buttons = [];
-
-    numericButtons.forEach((btn) => buttons.push(btn));
-
-    if (clearButton) {
-        buttons.push(clearButton);
-    }
-
-    if (enterButton) {
-        buttons.push(enterButton);
-    }
-
-    return buttons;
-}
-
-function limpiarSeleccionPinpadVR() {
-    const buttons = getPinpadButtonsVR();
-
-    buttons.forEach((btn) => {
-        btn.classList.remove('vr-pinpad-selected');
-    });
-}
-
-function actualizarSeleccionPinpadVR() {
-    const buttons = getPinpadButtonsVR();
-
-    if (buttons.length === 0) return;
-
-    if (selectedPinpadIndex < 0) {
-        selectedPinpadIndex = 0;
-    }
-
-    if (selectedPinpadIndex >= buttons.length) {
-        selectedPinpadIndex = buttons.length - 1;
-    }
-
-    buttons.forEach((btn, index) => {
-        btn.classList.toggle('vr-pinpad-selected', index === selectedPinpadIndex);
-    });
-
-    const msg = document.getElementById('pinpad-msg');
-
-    if (msg) {
-        msg.innerText = 'STICK IZQ: MOVER | A: PRESIONAR';
-        msg.style.color = '#a0a0b0';
-    }
-}
-
-function actualizarPinpadVR(delta) {
-    if (!isUIOpen) return;
-
-    vrNavCooldown -= delta;
-
-    const buttons = getPinpadButtonsVR();
-
-    if (buttons.length === 0) return;
-
-    const axes = getVRNavAxes();
-    const cols = 3;
-
-    if (vrNavCooldown <= 0) {
-        if (axes.x > 0.55) {
-            selectedPinpadIndex += 1;
-            vrNavCooldown = 0.22;
-        } else if (axes.x < -0.55) {
-            selectedPinpadIndex -= 1;
-            vrNavCooldown = 0.22;
-        } else if (axes.y > 0.55) {
-            selectedPinpadIndex += cols;
-            vrNavCooldown = 0.22;
-        } else if (axes.y < -0.55) {
-            selectedPinpadIndex -= cols;
-            vrNavCooldown = 0.22;
-        }
-
-        if (selectedPinpadIndex < 0) {
-            selectedPinpadIndex = 0;
-        }
-
-        if (selectedPinpadIndex >= buttons.length) {
-            selectedPinpadIndex = buttons.length - 1;
-        }
-
-        actualizarSeleccionPinpadVR();
-    }
-
-    if (consumeVRConfirmPressed()) {
-        const selectedButton = buttons[selectedPinpadIndex];
-
-        if (selectedButton) {
-            selectedButton.click();
-        }
-    }
-}
-
-function injectVRPinpadStyle() {
-    const style = document.createElement('style');
-
-    style.innerHTML = `
-        .vr-pinpad-selected {
-            outline: 4px solid #38bdf8 !important;
-            box-shadow: 0 0 18px #38bdf8 !important;
-            transform: scale(1.08);
-        }
-    `;
-
-    document.head.appendChild(style);
 }
 
 function onWindowResize() {

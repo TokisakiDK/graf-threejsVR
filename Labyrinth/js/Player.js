@@ -39,7 +39,11 @@ const vrInput = {
 
     confirmNow: false,
     confirmPrev: false,
-    confirmConsumed: false
+    confirmConsumed: false,
+
+    cancelNow: false,
+    cancelPrev: false,
+    cancelConsumed: false
 };
 
 const playerPosition = new THREE.Vector3();
@@ -159,6 +163,20 @@ export function consumeVRConfirmPressed() {
     return false;
 }
 
+export function consumeVRCancelPressed() {
+    const justPressed =
+        vrInput.cancelNow &&
+        !vrInput.cancelPrev &&
+        !vrInput.cancelConsumed;
+
+    if (justPressed) {
+        vrInput.cancelConsumed = true;
+        return true;
+    }
+
+    return false;
+}
+
 export function updatePlayer(delta, camera, mapData, renderer, isUIOpen = false) {
     if (!vrRig) return;
 
@@ -197,6 +215,10 @@ function resetVRInput() {
     vrInput.confirmNow = false;
     vrInput.confirmPrev = false;
     vrInput.confirmConsumed = false;
+
+    vrInput.cancelNow = false;
+    vrInput.cancelPrev = false;
+    vrInput.cancelConsumed = false;
 }
 
 function readVRControls(renderer) {
@@ -208,18 +230,25 @@ function readVRControls(renderer) {
 
     vrInput.interactPrev = vrInput.interactNow;
     vrInput.confirmPrev = vrInput.confirmNow;
+    vrInput.cancelPrev = vrInput.cancelNow;
 
     vrInput.interactNow = false;
     vrInput.confirmNow = false;
+    vrInput.cancelNow = false;
 
     vrInput.interactConsumed = false;
     vrInput.confirmConsumed = false;
+    vrInput.cancelConsumed = false;
 
     const session = renderer.xr.getSession();
 
     if (!session) return;
 
-    for (const source of session.inputSources) {
+    const sources = Array.from(session.inputSources);
+
+    for (let i = 0; i < sources.length; i++) {
+        const source = sources[i];
+
         if (!source.gamepad) continue;
 
         const gamepad = source.gamepad;
@@ -228,20 +257,32 @@ function readVRControls(renderer) {
 
         const stick = getStickAxes(axes);
 
-        if (source.handedness === 'left') {
+        const handedness = source.handedness || (i === 0 ? 'left' : 'right');
+
+        if (handedness === 'left') {
             vrInput.leftX = applyDeadzone(stick.x);
             vrInput.leftY = applyDeadzone(stick.y);
 
-            vrInput.running = isButtonPressed(buttons, 0);
+            // Gatillo izquierdo para correr.
+            vrInput.running =
+                isButtonPressed(buttons, 0) ||
+                isButtonPressed(buttons, 1);
         }
 
-        if (source.handedness === 'right') {
+        if (handedness === 'right') {
             vrInput.rightX = applyDeadzone(stick.x);
 
-            vrInput.interactNow = isButtonPressed(buttons, 0);
+            // Gatillo derecho para interactuar.
+            vrInput.interactNow =
+                isButtonPressed(buttons, 0) ||
+                isButtonPressed(buttons, 1);
 
+            // Botón A para presionar.
             vrInput.confirmNow =
-                isButtonPressed(buttons, 4) ||
+                isButtonPressed(buttons, 4);
+
+            // Botón B para cerrar / cancelar.
+            vrInput.cancelNow =
                 isButtonPressed(buttons, 5);
         }
     }
@@ -256,10 +297,15 @@ function getStickAxes(axes) {
     }
 
     if (axes.length >= 4) {
-        return {
-            x: axes[2] || 0,
-            y: axes[3] || 0
-        };
+        const pairA = Math.abs(axes[0] || 0) + Math.abs(axes[1] || 0);
+        const pairB = Math.abs(axes[2] || 0) + Math.abs(axes[3] || 0);
+
+        if (pairB >= pairA) {
+            return {
+                x: axes[2] || 0,
+                y: axes[3] || 0
+            };
+        }
     }
 
     return {
