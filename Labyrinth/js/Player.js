@@ -356,7 +356,15 @@ export function updatePlayer(delta, camera, mapData, renderer) {
 
                     // Colisiones (misma lógica que PC, usando mov)
                     const testX = character.position.x + mov.x;
-                    if (!hayColision && false) {}
+                    if (!hayColision(testX, character.position.z)) {
+                        character.position.x = testX;
+                    }
+
+                    const testZ = character.position.z + mov.z;
+                    if (!hayColision(character.position.x, testZ)) {
+                        character.position.z = testZ;
+                    }
+
                 }
             }
         }
