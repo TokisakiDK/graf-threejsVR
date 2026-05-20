@@ -149,13 +149,32 @@ export function construirMundo(scene) {
         [1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1]
     ];
 
-    const catalogoMapas = [
-        { grid: mapa1, texture: 'tapiz.webp' },
-        { grid: mapa2, texture: 'tapiz.webp' },
-        { grid: mapa3, texture: 'Fun.png' },
-        { grid: mapa4, texture: 'Fun.png' }
-    ]; 
-    const mapSelection = catalogoMapas[Math.floor(Math.random() * catalogoMapas.length)];
+const catalogoMapas = [
+    { name: 'Mapa 1', grid: mapa1, texture: 'tapiz.webp' },
+    { name: 'Mapa 2', grid: mapa2, texture: 'tapiz.webp' },
+    { name: 'Mapa 3', grid: mapa3, texture: 'Fun.png' },
+    { name: 'Mapa 4', grid: mapa4, texture: 'Fun.png' }
+];
+
+function randomSeguro() {
+    if (window.crypto && window.crypto.getRandomValues) {
+        const array = new Uint32Array(1);
+        window.crypto.getRandomValues(array);
+        return array[0] / 4294967295;
+    }
+
+    return Math.random();
+}
+
+const mapIndex = Math.floor(randomSeguro() * catalogoMapas.length);
+const mapSelection = catalogoMapas[mapIndex];
+const mapa = mapSelection.grid;
+
+mapState.mapName = mapSelection.name;
+mapState.mapIndex = mapIndex;
+mapState.mapTexture = mapSelection.texture;
+
+console.log('Laberinto aleatorio seleccionado:', mapSelection.name);s[Math.floor(Math.random() * catalogoMapas.length)];
     const mapa = mapSelection.grid;
 
     const texMuro = texLoader.load('assets/' + mapSelection.texture);

@@ -3,11 +3,13 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { construirMundo } from './Labyrinth.js';
 import {
+    consumeVRConfirmPressed,
     consumeVRInteractPressed,
     getPlayerPosition,
+    getVRNavAxes,
     initPlayer,
     updatePlayer
-} from './Player.js?v=8';
+} from './Player.js?v=20';
 
 let camera, scene, renderer, mapData, bgMusic;
 
@@ -22,6 +24,9 @@ const clock = new THREE.Clock();
 let currentPin = '';
 let sfxPin, sfxError, sfxSuccess;
 
+let selectedPinpadIndex = 0;
+let vrNavCooldown = 0;
+
 init();
 
 function init() {
@@ -31,27 +36,19 @@ function init() {
         const progressBar = document.getElementById('progress-bar');
         const loadingText = document.getElementById('loading-text');
 
-        if (progressBar) {
-            progressBar.style.width = progress + '%';
-        }
-
-        if (loadingText) {
-            loadingText.innerText = Math.floor(progress) + '%';
-        }
+        if (progressBar) progressBar.style.width = progress + '%';
+        if (loadingText) loadingText.innerText = Math.floor(progress) + '%';
     };
 
     THREE.DefaultLoadingManager.onLoad = function () {
         const loadingScreen = document.getElementById('loading-screen');
         const startScreen = document.getElementById('start-screen');
 
-        if (loadingScreen) {
-            loadingScreen.style.display = 'none';
-        }
-
-        if (startScreen) {
-            startScreen.style.display = 'flex';
-        }
+        if (loadingScreen) loadingScreen.style.display = 'none';
+        if (startScreen) startScreen.style.display = 'flex';
     };
+
+    injectVRPinpadStyle();
 
     const startBtn = document.getElementById('start-btn');
 
@@ -59,9 +56,7 @@ function init() {
         startBtn.addEventListener('click', () => {
             const startScreen = document.getElementById('start-screen');
 
-            if (startScreen) {
-                startScreen.style.display = 'none';
-            }
+            if (startScreen) startScreen.style.display = 'none';
 
             if (bgMusic && bgMusic.buffer && !bgMusic.isPlaying) {
                 bgMusic.play();
@@ -89,48 +84,12 @@ function init() {
         pinpadClose.addEventListener('click', cerrarPinpad);
     }
 
-    const botones = document.querySelectorAll('.pinpad-btn:not(.action-btn)');
-
-    botones.forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-            const numero = e.target.innerText;
-
-            if (numero !== 'C' && numero !== 'E' && currentPin.length < 4) {
-                currentPin += numero;
-                actualizarPantallaPinpad();
-                reproducirSonido(sfxPin);
-            }
-        });
-    });
-
-    const pinpadClear = document.getElementById('pinpad-clear');
-
-    if (pinpadClear) {
-        pinpadClear.addEventListener('click', () => {
-            currentPin = '';
-            actualizarPantallaPinpad();
-            reproducirSonido(sfxPin);
-
-            const msg = document.getElementById('pinpad-msg');
-
-            if (msg) {
-                msg.innerText = 'INTRODUCE EL PIN';
-                msg.style.color = '#a0a0b0';
-            }
-        });
-    }
-
-    const pinpadEnter = document.getElementById('pinpad-enter');
-
-    if (pinpadEnter) {
-        pinpadEnter.addEventListener('click', () => {
-            validarCodigoPinpad();
-        });
-    }
+    configurarPinpad();
 
     scene = new THREE.Scene();
 
-    scene.fog = new THREE.FogExp2(0xd8e8ff, 0.00028);
+    // Niebla
+    scene.fog = new THREE.FogExp2(0xdbeafe, 0.00032);
 
     camera = new THREE.PerspectiveCamera(
         60,
@@ -154,19 +113,19 @@ function init() {
 
     renderer.xr.enabled = true;
 
-    const sessionInit = {
-        optionalFeatures: [
-            'local-floor',
-            'bounded-floor',
-            'hand-tracking',
-            'dom-overlay'
-        ],
-        domOverlay: {
-            root: document.body
-        }
-    };
-
-    document.body.appendChild(VRButton.createButton(renderer, sessionInit));
+    document.body.appendChild(
+        VRButton.createButton(renderer, {
+            optionalFeatures: [
+                'local-floor',
+                'bounded-floor',
+                'hand-tracking',
+                'dom-overlay'
+            ],
+            domOverlay: {
+                root: document.body
+            }
+        })
+    );
 
     const gameContainer = document.getElementById('game-container');
 
@@ -272,6 +231,9 @@ function init() {
 
     mapData = construirMundo(scene);
 
+    console.log('Mapa cargado:', mapData.mapName || 'Sin nombre');
+    console.log('Código secreto:', mapData.codigoSecreto.join(''));
+
     mapData.sfxPortalB = portalSoundB;
     mapData.sfxPortalP = portalSoundP;
 
@@ -287,6 +249,45 @@ function init() {
     renderer.setAnimationLoop(animate);
 }
 
+function configurarPinpad() {
+    const botones = document.querySelectorAll('.pinpad-btn:not(.action-btn)');
+
+    botones.forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            const numero = e.target.innerText.trim();
+
+            if (numero !== 'C' && numero !== 'E' && currentPin.length < 4) {
+                currentPin += numero;
+                actualizarPantallaPinpad();
+                reproducirSonido(sfxPin);
+            }
+        });
+    });
+
+    const pinpadClear = document.getElementById('pinpad-clear');
+
+    if (pinpadClear) {
+        pinpadClear.addEventListener('click', () => {
+            currentPin = '';
+            actualizarPantallaPinpad();
+            reproducirSonido(sfxPin);
+
+            const msg = document.getElementById('pinpad-msg');
+
+            if (msg) {
+                msg.innerText = 'INTRODUCE EL PIN';
+                msg.style.color = '#a0a0b0';
+            }
+        });
+    }
+
+    const pinpadEnter = document.getElementById('pinpad-enter');
+
+    if (pinpadEnter) {
+        pinpadEnter.addEventListener('click', validarCodigoPinpad);
+    }
+}
+
 function intentarInteractuar() {
     if (!mapData || doorOpened) return;
 
@@ -294,11 +295,11 @@ function intentarInteractuar() {
 
     const cercaDePinpad =
         mapData.pinpadObj &&
-        playerPos.distanceTo(mapData.pinpadObj.position) < 260;
+        playerPos.distanceTo(mapData.pinpadObj.position) < 280;
 
     const cercaDePuerta =
         mapData.escapeDoor &&
-        playerPos.distanceTo(mapData.escapeDoor.position) < 260;
+        playerPos.distanceTo(mapData.escapeDoor.position) < 280;
 
     if (cercaDePinpad) {
         abrirPinpad();
@@ -372,6 +373,8 @@ function reproducirSonido(audioObject) {
 function abrirPinpad() {
     isUIOpen = true;
     currentPin = '';
+    selectedPinpadIndex = 0;
+    vrNavCooldown = 0;
 
     actualizarPantallaPinpad();
 
@@ -393,6 +396,8 @@ function abrirPinpad() {
         pinpadUI.style.zIndex = '99999';
         pinpadUI.style.pointerEvents = 'auto';
     }
+
+    actualizarSeleccionPinpadVR();
 }
 
 function cerrarPinpad() {
@@ -403,6 +408,8 @@ function cerrarPinpad() {
     if (pinpadUI) {
         pinpadUI.style.display = 'none';
     }
+
+    limpiarSeleccionPinpadVR();
 }
 
 function actualizarPantallaPinpad() {
@@ -418,6 +425,9 @@ function mostrarAlertaPuerta() {
     const alerta = document.getElementById('door-alert');
 
     if (alerta) {
+        alerta.innerText = doorOpened
+            ? 'PUERTA ABIERTA'
+            : 'LA PUERTA ESTÁ BLOQUEADA. BUSCA EL PIN.';
         alerta.style.display = 'block';
         alerta.style.zIndex = '99999';
 
@@ -427,6 +437,142 @@ function mostrarAlertaPuerta() {
             alerta.style.display = 'none';
         }, 3000);
     }
+}
+
+function actualizarMensajeInteraccion() {
+    if (!mapData || isUIOpen || doorOpened) {
+        const prompt = document.getElementById('interact-prompt');
+        if (prompt) prompt.style.display = 'none';
+        return;
+    }
+
+    const playerPos = getPlayerPosition();
+
+    const cercaDePinpad =
+        mapData.pinpadObj &&
+        playerPos.distanceTo(mapData.pinpadObj.position) < 280;
+
+    const cercaDePuerta =
+        mapData.escapeDoor &&
+        playerPos.distanceTo(mapData.escapeDoor.position) < 280;
+
+    const prompt = document.getElementById('interact-prompt');
+
+    if (!prompt) return;
+
+    if (cercaDePinpad) {
+        prompt.innerText = 'GATILLO DERECHO / E: USAR PINPAD';
+        prompt.style.display = 'block';
+    } else if (cercaDePuerta) {
+        prompt.innerText = 'GATILLO DERECHO / E: REVISAR PUERTA';
+        prompt.style.display = 'block';
+    } else {
+        prompt.style.display = 'none';
+    }
+}
+
+function getPinpadButtonsVR() {
+    const numericButtons = Array.from(
+        document.querySelectorAll('.pinpad-btn:not(.action-btn)')
+    );
+
+    const clearButton = document.getElementById('pinpad-clear');
+    const enterButton = document.getElementById('pinpad-enter');
+
+    const buttons = [];
+
+    numericButtons.forEach((btn) => buttons.push(btn));
+
+    if (clearButton) buttons.push(clearButton);
+    if (enterButton) buttons.push(enterButton);
+
+    return buttons;
+}
+
+function limpiarSeleccionPinpadVR() {
+    const buttons = getPinpadButtonsVR();
+
+    buttons.forEach((btn) => {
+        btn.classList.remove('vr-pinpad-selected');
+    });
+}
+
+function actualizarSeleccionPinpadVR() {
+    const buttons = getPinpadButtonsVR();
+
+    if (buttons.length === 0) return;
+
+    if (selectedPinpadIndex < 0) selectedPinpadIndex = 0;
+    if (selectedPinpadIndex >= buttons.length) selectedPinpadIndex = buttons.length - 1;
+
+    buttons.forEach((btn, index) => {
+        btn.classList.toggle('vr-pinpad-selected', index === selectedPinpadIndex);
+    });
+
+    const msg = document.getElementById('pinpad-msg');
+
+    if (msg) {
+        msg.innerText = 'STICK IZQ: MOVER | A: PRESIONAR';
+        msg.style.color = '#a0a0b0';
+    }
+}
+
+function actualizarPinpadVR(delta) {
+    if (!isUIOpen) return;
+
+    vrNavCooldown -= delta;
+
+    const buttons = getPinpadButtonsVR();
+
+    if (buttons.length === 0) return;
+
+    const axes = getVRNavAxes();
+
+    const cols = 3;
+
+    if (vrNavCooldown <= 0) {
+        if (axes.x > 0.55) {
+            selectedPinpadIndex += 1;
+            vrNavCooldown = 0.22;
+        } else if (axes.x < -0.55) {
+            selectedPinpadIndex -= 1;
+            vrNavCooldown = 0.22;
+        } else if (axes.y > 0.55) {
+            selectedPinpadIndex += cols;
+            vrNavCooldown = 0.22;
+        } else if (axes.y < -0.55) {
+            selectedPinpadIndex -= cols;
+            vrNavCooldown = 0.22;
+        }
+
+        if (selectedPinpadIndex < 0) selectedPinpadIndex = 0;
+        if (selectedPinpadIndex >= buttons.length) selectedPinpadIndex = buttons.length - 1;
+
+        actualizarSeleccionPinpadVR();
+    }
+
+    if (consumeVRConfirmPressed()) {
+        const selectedButton = buttons[selectedPinpadIndex];
+
+        if (selectedButton) {
+            selectedButton.click();
+            reproducirSonido(sfxPin);
+        }
+    }
+}
+
+function injectVRPinpadStyle() {
+    const style = document.createElement('style');
+
+    style.innerHTML = `
+        .vr-pinpad-selected {
+            outline: 4px solid #38bdf8 !important;
+            box-shadow: 0 0 18px #38bdf8 !important;
+            transform: scale(1.08);
+        }
+    `;
+
+    document.head.appendChild(style);
 }
 
 function animate() {
@@ -439,30 +585,10 @@ function animate() {
             intentarInteractuar();
         }
 
+        actualizarPinpadVR(delta);
+        actualizarMensajeInteraccion();
+
         const playerPos = getPlayerPosition();
-
-        if (!isUIOpen && !doorOpened) {
-            const cercaDePinpad =
-                mapData.pinpadObj &&
-                playerPos.distanceTo(mapData.pinpadObj.position) < 260;
-
-            const cercaDePuerta =
-                mapData.escapeDoor &&
-                playerPos.distanceTo(mapData.escapeDoor.position) < 260;
-
-            const prompt = document.getElementById('interact-prompt');
-
-            if (prompt) {
-                prompt.style.display =
-                    cercaDePinpad || cercaDePuerta ? 'block' : 'none';
-            }
-        } else {
-            const prompt = document.getElementById('interact-prompt');
-
-            if (prompt) {
-                prompt.style.display = 'none';
-            }
-        }
 
         if (doorOpened && !successTriggered) {
             const distToExit = Math.hypot(

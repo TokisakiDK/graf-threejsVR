@@ -18,15 +18,11 @@ const keys = {
 
 const config = {
     eyeHeight: 175,
-
     radius: 40,
-
     walkSpeed: 180,
-    runSpeed: 340,
-
+    runSpeed: 350,
     turnSpeedPC: 2.5,
     turnSpeedVR: 2.4,
-
     deadzone: 0.18
 };
 
@@ -34,10 +30,16 @@ const vrInput = {
     leftX: 0,
     leftY: 0,
     rightX: 0,
+
     running: false,
-    interactPressed: false,
-    interactPressedPrevious: false,
-    interactPressedConsumed: false
+
+    interactNow: false,
+    interactPrev: false,
+    interactConsumed: false,
+
+    confirmNow: false,
+    confirmPrev: false,
+    confirmConsumed: false
 };
 
 const playerPosition = new THREE.Vector3();
@@ -122,17 +124,35 @@ export function getPlayerPosition() {
     return playerPosition.clone();
 }
 
-export function consumeVRInteractPressed() {
-    if (vrInput.interactPressedConsumed) {
-        return false;
-    }
+export function getVRNavAxes() {
+    return {
+        x: vrInput.leftX,
+        y: vrInput.leftY
+    };
+}
 
+export function consumeVRInteractPressed() {
     const justPressed =
-        vrInput.interactPressed &&
-        !vrInput.interactPressedPrevious;
+        vrInput.interactNow &&
+        !vrInput.interactPrev &&
+        !vrInput.interactConsumed;
 
     if (justPressed) {
-        vrInput.interactPressedConsumed = true;
+        vrInput.interactConsumed = true;
+        return true;
+    }
+
+    return false;
+}
+
+export function consumeVRConfirmPressed() {
+    const justPressed =
+        vrInput.confirmNow &&
+        !vrInput.confirmPrev &&
+        !vrInput.confirmConsumed;
+
+    if (justPressed) {
+        vrInput.confirmConsumed = true;
         return true;
     }
 
@@ -167,21 +187,33 @@ function resetVRInput() {
     vrInput.leftX = 0;
     vrInput.leftY = 0;
     vrInput.rightX = 0;
+
     vrInput.running = false;
-    vrInput.interactPressed = false;
-    vrInput.interactPressedPrevious = false;
-    vrInput.interactPressedConsumed = false;
+
+    vrInput.interactNow = false;
+    vrInput.interactPrev = false;
+    vrInput.interactConsumed = false;
+
+    vrInput.confirmNow = false;
+    vrInput.confirmPrev = false;
+    vrInput.confirmConsumed = false;
 }
 
 function readVRControls(renderer) {
     vrInput.leftX = 0;
     vrInput.leftY = 0;
     vrInput.rightX = 0;
+
     vrInput.running = false;
 
-    vrInput.interactPressedPrevious = vrInput.interactPressed;
-    vrInput.interactPressed = false;
-    vrInput.interactPressedConsumed = false;
+    vrInput.interactPrev = vrInput.interactNow;
+    vrInput.confirmPrev = vrInput.confirmNow;
+
+    vrInput.interactNow = false;
+    vrInput.confirmNow = false;
+
+    vrInput.interactConsumed = false;
+    vrInput.confirmConsumed = false;
 
     const session = renderer.xr.getSession();
 
@@ -200,18 +232,18 @@ function readVRControls(renderer) {
             vrInput.leftX = applyDeadzone(stick.x);
             vrInput.leftY = applyDeadzone(stick.y);
 
-            vrInput.running =
-                isButtonPressed(buttons, 4) ||
-                isButtonPressed(buttons, 5);
+            // Gatillo izquierdo para correr
+            vrInput.running = isButtonPressed(buttons, 0);
         }
 
         if (source.handedness === 'right') {
             vrInput.rightX = applyDeadzone(stick.x);
 
-            vrInput.interactPressed =
-                isButtonPressed(buttons, 0) ||
-                isButtonPressed(buttons, 4) ||
-                isButtonPressed(buttons, 5);
+            // Gatillo derecho para interactuar
+            vrInput.interactNow = isButtonPressed(buttons, 0);
+
+            // Botón A para presionar en pinpad
+            vrInput.confirmNow = isButtonPressed(buttons, 4);
         }
     }
 }
