@@ -10,9 +10,12 @@ let portalCooldown = 0;
 let stepTimer = 0;
 let isVR = false; // Estado de VR
 
+// Rig de VR (solo para locomoción/cámara)
+let vrRig;
+
 export let isAerialView = false;
 
-// Rig VR: contenedor al que se ancla la cámara para que el headset no quede "en el suelo"
+// (Se reemplaza playerRig por vrRig)
 let playerRig;
 
 // Locomoción por thumbstick (Meta Quest)
@@ -25,15 +28,21 @@ export function initPlayer(scene, spawnPosition, renderer, camera) {
     const loader = new FBXLoader();
 
 
-    // Crear rig VR y anclar la cámara en él (la cámara/pose real la maneja el headset)
-    playerRig = new THREE.Group();
-    playerRig.position.set(spawnPosition.x, 1.6, spawnPosition.z);
-    scene.add(playerRig);
+    // Rig VR: mueve la cámara (no el personaje) con el thumbstick
+    vrRig = new THREE.Group();
 
-    // Importante: en VR la cámara debe ser hija del rig para que no quede “en el suelo”
-    if (camera && camera.parent !== playerRig) {
-        playerRig.add(camera);
+    // Altura media de los muros: en tu escena los muros van aprox a y=175 con base en y=0,
+    // así que el punto medio está cerca de ~87.5. Usamos ~85.
+    const vrEyeHeight = 85;
+
+    vrRig.position.set(spawnPosition.x, vrEyeHeight, spawnPosition.z);
+    scene.add(vrRig);
+
+    // Importante: en VR la cámara debe ser hija del rig
+    if (camera && camera.parent !== vrRig) {
+        vrRig.add(camera);
     }
+
 
 
     // En WebXR, la cámara es añadida al rig por app.js.
@@ -306,15 +315,15 @@ export function updatePlayer(delta, camera, mapData, renderer) {
             renderer.xr.__readVRControls();
         }
 
-        // Rig sigue al personaje (altura fija; el headset añade el offset real)
-        if (playerRig && character) {
-            playerRig.position.x = character.position.x;
-            playerRig.position.z = character.position.z;
-            // y queda en altura fija
+        // Mover cámara VR (a mitad de altura de muros) para que puedas moverte
+        if (vrRig && character) {
+            vrRig.position.x = character.position.x;
+            vrRig.position.z = character.position.z;
         }
 
-    // Thumbstick VR: mueve al personaje como si fuera WASD
-        // Nota: aquí vrMove se rellena leyendo los ejes del controlador WebXR.
+
+    // Thumbstick VR: mueve la VRCAM (vrRig) tipo WASD
+        // Nota: vrMove se rellena leyendo los ejes del controlador WebXR.
         // vrMove.y = forward/back, vrMove.x = strafe
         if (character) {
             const moveVec = new THREE.Vector3(vrMove.x, 0, vrMove.y);
@@ -354,16 +363,17 @@ export function updatePlayer(delta, camera, mapData, renderer) {
                     // Movimiento en el plano siguiendo la rotación del personaje
                     const mov = new THREE.Vector3(0, 0, speed * delta).applyQuaternion(character.quaternion);
 
-                    // Colisiones (misma lógica que PC, usando mov)
-                    const testX = character.position.x + mov.x;
-                    if (!hayColision(testX, character.position.z)) {
-                        character.position.x = testX;
-                    }
+                    // Colisiones (misma lógica que PC, usando vrRig)
+                    const testX = vrRig.position.x + mov.x;
+                    const testZ = vrRig.position.z + mov.z;
 
-                    const testZ = character.position.z + mov.z;
-                    if (!hayColision(character.position.x, testZ)) {
-                        character.position.z = testZ;
-                    }
+                    if (!hayColision(testX, vrRig.position.z)) vrRig.position.x = testX;
+                    if (!hayColision(vrRig.position.x, testZ)) vrRig.position.z = testZ;
+
+                    // Sincronizamos el personaje (opcional para interacción/portal)
+                    character.position.x = vrRig.position.x;
+                    character.position.z = vrRig.position.z;
+
 
                 }
             }
