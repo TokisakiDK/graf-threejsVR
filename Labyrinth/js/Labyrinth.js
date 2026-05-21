@@ -72,7 +72,7 @@ export function construirMundo(scene) {
     const tileSize = 250;
     const tamanoMapa = 15 * tileSize;
 
-    const floorTex = texLoader.load('assets/Alfombra.jpg');
+    const floorTex = texLoader.load('../assets/Alfombra.jpg');
     floorTex.wrapS = THREE.RepeatWrapping;
     floorTex.wrapT = THREE.RepeatWrapping;
     floorTex.repeat.set(15, 15);
@@ -172,7 +172,7 @@ export function construirMundo(scene) {
     const mapSelection = catalogoMapas[mapIndex];
     const mapa = mapSelection.grid;
 
-    const texMuro = texLoader.load('assets/' + mapSelection.texture);
+    const texMuro = texLoader.load('../assets/' + mapSelection.texture);
     texMuro.wrapS = THREE.RepeatWrapping;
     texMuro.wrapT = THREE.RepeatWrapping;
     texMuro.repeat.set(1, 1);
@@ -180,10 +180,10 @@ export function construirMundo(scene) {
     const matMuroTapiz = new THREE.MeshStandardMaterial({ map: texMuro, roughness: 0.8 });
 
     const matPortalB = new THREE.MeshBasicMaterial({
-        map: crearTexturaDeVideo('assets/portal_b.webm'), transparent: true, side: THREE.DoubleSide
+        map: crearTexturaDeVideo('../assets/portal_b.webm'), transparent: true, side: THREE.DoubleSide
     });
     const matPortalP = new THREE.MeshBasicMaterial({
-        map: crearTexturaDeVideo('assets/portal_p.webm'), transparent: true, side: THREE.DoubleSide
+        map: crearTexturaDeVideo('../assets/portal_p.webm'), transparent: true, side: THREE.DoubleSide
     });
 
     const geomPortal = new THREE.PlaneGeometry(200, 200);
@@ -195,7 +195,7 @@ export function construirMundo(scene) {
     let spawnPositionSet = false;
     const paredesDisponibles = [];
 
-    const catalogoDecoraciones = ['models/cactus_maceta.glb', 'models/maceta.glb'];
+    const catalogoDecoraciones = ['../models/cactus_maceta.glb', '../models/maceta.glb'];
 
     const cargarPropEscena = (ruta, config) => {
         gltfLoader.load(ruta, (gltf) => {
@@ -273,7 +273,7 @@ export function construirMundo(scene) {
                     else if (mapa[f][c + 1] === 0) { pRotY = Math.PI / 2; pOffsetX = 125; } 
                     else if (mapa[f][c - 1] === 0) { pRotY = -Math.PI / 2; pOffsetX = -125; }
 
-                    cargarPropEscena('models/pinpad.glb', {
+                    cargarPropEscena('../models/pinpad.glb', {
                         escala: 3.5, x: posX + pOffsetX, y: 150, z: posZ + pOffsetZ, rotY: pRotY,
                         onLoad: (mesh) => { mapState.pinpadObj = mesh; },
                         isObstacle: false
@@ -296,7 +296,7 @@ export function construirMundo(scene) {
                 else if (mapa[f][c - 1] === 0) { dRotY = Math.PI / 2; dOffsetX = pushDoor; } 
                 else if (mapa[f][c + 1] === 0) { dRotY = -Math.PI / 2; dOffsetX = -pushDoor; }
 
-                cargarPropEscena('models/door.glb', {
+                cargarPropEscena('../models/door.glb', {
                     escala: 2.2, x: posX + dOffsetX, y: 0, z: posZ + dOffsetZ, rotY: dRotY, alignGround: true,
                     onLoad: (mesh) => { mapState.escapeDoor = mesh; },
                     isObstacle: false
@@ -398,7 +398,7 @@ export function construirMundo(scene) {
     for (let i = 0; i < paredesDisponibles.length; i++) {
         const data = paredesDisponibles[i];
         if (!data.isFloor && randomSeguro() > 0.50 && cuadrosGenerados < 30) {
-            cargarPropEscena('models/cuadro.glb', {
+            cargarPropEscena('../models/cuadro.glb', {
                 escala: 1.4, x: data.x, y: 180, z: data.z, rotY: data.rotY, isObstacle: false
             });
             cuadrosGenerados++;

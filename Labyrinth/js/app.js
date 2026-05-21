@@ -195,7 +195,7 @@ function configurarPinpadHTML() {
 
 function cargarCielo() {
     const catalogoCielos = [
-        'assets/sky/sky_1.hdr', 'assets/sky/sky_2.hdr', 'assets/sky/sky_3.hdr', 'assets/sky/sky_4.hdr'
+        '../assets/sky/sky_1.hdr', '../assets/sky/sky_2.hdr', '../assets/sky/sky_3.hdr', '../assets/sky/sky_4.hdr'
     ];
     const cieloElegido = catalogoCielos[Math.floor(Math.random() * catalogoCielos.length)];
     const rgbeLoader = new RGBELoader(THREE.DefaultLoadingManager);
@@ -232,7 +232,7 @@ function crearAudio() {
     const audioLoader = new THREE.AudioLoader(THREE.DefaultLoadingManager);
 
     const catalogoAudio = [
-        'assets/bgm/dreamcore.wav', 'assets/bgm/dreamcore_2.wav', 'assets/bgm/dreamcore_3.wav', 'assets/bgm/dreamcore_4.wav'
+        '../assets/bgm/dreamcore.wav', '../assets/bgm/dreamcore_2.wav', '../assets/bgm/dreamcore_3.wav', '../assets/bgm/dreamcore_4.wav'
     ];
     const pistaElegida = catalogoAudio[Math.floor(Math.random() * catalogoAudio.length)];
 
@@ -250,11 +250,11 @@ function crearAudio() {
     sfxError = new THREE.Audio(listener);
     sfxSuccess = new THREE.Audio(listener);
 
-    cargarSFX(audioLoader, portalSoundB, 'assets/affects/portal_b.wav', 0.8);
-    cargarSFX(audioLoader, portalSoundP, 'assets/affects/portal_p.wav', 0.8);
-    cargarSFX(audioLoader, sfxPin, 'assets/affects/pin.wav', 1.0);
-    cargarSFX(audioLoader, sfxError, 'assets/affects/error.wav', 1.0);
-    cargarSFX(audioLoader, sfxSuccess, 'assets/affects/pinpad.wav', 1.0);
+    cargarSFX(audioLoader, portalSoundB, '../assets/affects/portal_b.wav', 0.8);
+    cargarSFX(audioLoader, portalSoundP, '../assets/affects/portal_p.wav', 0.8);
+    cargarSFX(audioLoader, sfxPin, '../assets/affects/pin.wav', 1.0);
+    cargarSFX(audioLoader, sfxError, '../assets/affects/error.wav', 1.0);
+    cargarSFX(audioLoader, sfxSuccess, '../assets/affects/pinpad.wav', 1.0);
 
     setTimeout(() => {
         if (mapData) {
