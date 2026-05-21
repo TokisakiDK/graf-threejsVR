@@ -73,7 +73,6 @@ function init() {
 
     initPlayer(scene, mapData.spawnPosition, renderer, camera);
 
-    // Inicializamos UI de VR
     crearPinpadVR3D();
     
     vrPrompt = crearTextoPlano('', 500, 60, '#ffcc00');
@@ -89,9 +88,7 @@ function init() {
     configurarTeclado();
     configurarPinpadHTML();
 
-    // Eventos de entrada a VR
     renderer.xr.addEventListener('sessionstart', () => {
-        // Obliga al navegador a encender la música al ponerte el visor
         if (THREE.AudioContext.getContext().state !== 'running') {
             THREE.AudioContext.getContext().resume();
         }
@@ -107,11 +104,9 @@ function init() {
 
     window.addEventListener('resize', onWindowResize);
     renderer.setAnimationLoop(animate);
-    // mostrarPantallaInicio() la dispara DefaultLoadingManager.onLoad (o el fallback de 10s)
 }
 
 function prepararPantallaCargaSegura() {
-    // Fallback: si en 10 segundos no termina de cargar, mostramos la pantalla igual
     const fallbackTimer = setTimeout(() => mostrarPantallaInicio(), 10000);
 
     THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
@@ -125,7 +120,7 @@ function prepararPantallaCargaSegura() {
 
     THREE.DefaultLoadingManager.onLoad = function () {
         clearTimeout(fallbackTimer);
-        // mostrarPantallaInicio() la dispara DefaultLoadingManager.onLoad (o el fallback de 10s)
+        mostrarPantallaInicio(); // ESTO FALTABA: Oculta la pantalla cuando todo carga con éxito
     };
 
     THREE.DefaultLoadingManager.onError = function (url) {
@@ -144,10 +139,14 @@ function configurarInicio() {
     const startBtn = document.getElementById('start-btn');
     if (!startBtn) return;
     startBtn.addEventListener('click', () => {
+        // Garantiza que el audio se desbloquee al hacer clic
         if (THREE.AudioContext.getContext().state !== 'running') {
-            THREE.AudioContext.getContext().resume();
+            THREE.AudioContext.getContext().resume().then(() => {
+                iniciarJuego();
+            });
+        } else {
+            iniciarJuego();
         }
-        iniciarJuego();
     });
 }
 
@@ -206,8 +205,9 @@ function configurarPinpadHTML() {
 }
 
 function cargarCielo() {
+    // RUTAS CORREGIDAS (sin ../)
     const catalogoCielos = [
-        '../assets/sky/sky_1.hdr', '../assets/sky/sky_2.hdr', '../assets/sky/sky_3.hdr', '../assets/sky/sky_4.hdr'
+        'assets/sky/sky_1.hdr', 'assets/sky/sky_2.hdr', 'assets/sky/sky_3.hdr', 'assets/sky/sky_4.hdr'
     ];
     const cieloElegido = catalogoCielos[Math.floor(Math.random() * catalogoCielos.length)];
     const rgbeLoader = new RGBELoader(THREE.DefaultLoadingManager);
@@ -243,8 +243,9 @@ function crearAudio() {
     camera.add(listener);
     const audioLoader = new THREE.AudioLoader(THREE.DefaultLoadingManager);
 
+    // RUTAS CORREGIDAS (sin ../)
     const catalogoAudio = [
-        '../assets/bgm/dreamcore.wav', '../assets/bgm/dreamcore_2.wav', '../assets/bgm/dreamcore_3.wav', '../assets/bgm/dreamcore_4.wav'
+        'assets/bgm/dreamcore.wav', 'assets/bgm/dreamcore_2.wav', 'assets/bgm/dreamcore_3.wav', 'assets/bgm/dreamcore_4.wav'
     ];
     const pistaElegida = catalogoAudio[Math.floor(Math.random() * catalogoAudio.length)];
 
@@ -262,11 +263,11 @@ function crearAudio() {
     sfxError = new THREE.Audio(listener);
     sfxSuccess = new THREE.Audio(listener);
 
-    cargarSFX(audioLoader, portalSoundB, '../assets/affects/portal_b.wav', 0.8);
-    cargarSFX(audioLoader, portalSoundP, '../assets/affects/portal_p.wav', 0.8);
-    cargarSFX(audioLoader, sfxPin, '../assets/affects/pin.wav', 1.0);
-    cargarSFX(audioLoader, sfxError, '../assets/affects/error.wav', 1.0);
-    cargarSFX(audioLoader, sfxSuccess, '../assets/affects/pinpad.wav', 1.0);
+    cargarSFX(audioLoader, portalSoundB, 'assets/affects/portal_b.wav', 0.8);
+    cargarSFX(audioLoader, portalSoundP, 'assets/affects/portal_p.wav', 0.8);
+    cargarSFX(audioLoader, sfxPin, 'assets/affects/pin.wav', 1.0);
+    cargarSFX(audioLoader, sfxError, 'assets/affects/error.wav', 1.0);
+    cargarSFX(audioLoader, sfxSuccess, 'assets/affects/pinpad.wav', 1.0);
 
     setTimeout(() => {
         if (mapData) {
@@ -519,7 +520,6 @@ function abrirPinpadVR() {
     const pos = camPos.clone().add(camDir.multiplyScalar(120));
     vrPinpad.group.position.set(pos.x, camPos.y - 15, pos.z);
     
-    // ESTO CORRIGE EL EFECTO ESPEJO: Copia exacta de la rotación de tu cabeza
     vrPinpad.group.quaternion.copy(camera.quaternion);
     vrPinpad.group.scale.set(0.15, 0.15, 0.15);
 
@@ -659,7 +659,6 @@ function actualizarMensajeInteraccion() {
             vrPrompt.position.copy(camPos).add(camDir.multiplyScalar(150));
             vrPrompt.position.y -= 25; 
             
-            // ESTO CORRIGE EL EFECTO ESPEJO DEL TEXTO
             vrPrompt.quaternion.copy(camera.quaternion);
 
             if (cercaDePinpad) cambiarTextoPlano(vrPrompt, 'GATILLO DERECHO: USAR PINPAD', '#ffcc00');
@@ -692,7 +691,6 @@ function animate() {
         actualizarPinpadVR(delta);
         actualizarMensajeInteraccion();
 
-        // GATILLO DERECHO PARA INTERACTUAR 
         if (!isUIOpen && consumeVRInteractPressed()) {
             intentarInteractuar();
         }
