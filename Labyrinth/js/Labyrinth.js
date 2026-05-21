@@ -60,7 +60,7 @@ export function construirMundo(scene) {
         obstacles: [], portalsArray: [], linkedPortals: [], randomPortals: [], safeSpots: [],
         spawnPosition: new THREE.Vector3(), escapeDoor: null, doorPos: new THREE.Vector3(),
         doorBarrier: null, doorGridIndex: null, pinpadObj: null, codigoSecreto: [], grid: [],
-        tileSize: 500, offset: 0, mapName: '', mapIndex: 0, mapTexture: '' // tileSize = 500
+        tileSize: 250, offset: 0, mapName: '', mapIndex: 0, mapTexture: ''
     };
 
     const glifosPosibles = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -69,15 +69,14 @@ export function construirMundo(scene) {
         mapState.codigoSecreto.push(glifosPosibles.splice(index, 1)[0]);
     }
 
-    // PASILLOS EL DOBLE DE ANCHOS (500)
-    const tileSize = 500;
-    const alturaMuro = 700;
-    const tamanoMapa = 15 * tileSize; // 7500
+    const tileSize = 250;
+    const tamanoMapa = 15 * tileSize;
 
+    // RUTAS CORREGIDAS
     const floorTex = texLoader.load('assets/Alfombra.jpg');
     floorTex.wrapS = THREE.RepeatWrapping;
     floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(30, 30); 
+    floorTex.repeat.set(15, 15);
 
     const floorMesh = new THREE.Mesh(
         new THREE.PlaneGeometry(tamanoMapa, tamanoMapa),
@@ -85,11 +84,11 @@ export function construirMundo(scene) {
     );
 
     floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.position.set(-250, 0, -250);
+    floorMesh.position.set(-125, 0, -125);
     floorMesh.receiveShadow = true;
     scene.add(floorMesh);
 
-    const geomMuro = new THREE.BoxGeometry(tileSize, alturaMuro, tileSize);
+    const geomMuro = new THREE.BoxGeometry(tileSize, 350, tileSize);
 
     const mapa1 = [
         [1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 1],
@@ -262,7 +261,7 @@ export function construirMundo(scene) {
             const valor = mapa[f][c];
 
             if (valor === 1 || valor === 5) {
-                dummy.position.set(posX, alturaMuro / 2, posZ);
+                dummy.position.set(posX, 175, posZ);
                 dummy.updateMatrix();
                 instancedWalls.setMatrixAt(wallCounter, dummy.matrix);
                 wallCounter++;
@@ -270,11 +269,10 @@ export function construirMundo(scene) {
                 if (valor === 5) {
                     let pRotY = 0, pOffsetZ = 0, pOffsetX = 0;
 
-                    // Desfase de 250 (la mitad de 500)
-                    if (mapa[f + 1] && mapa[f + 1][c] === 0) { pRotY = 0; pOffsetZ = 250; } 
-                    else if (mapa[f - 1] && mapa[f - 1][c] === 0) { pRotY = Math.PI; pOffsetZ = -250; } 
-                    else if (mapa[f][c + 1] === 0) { pRotY = Math.PI / 2; pOffsetX = 250; } 
-                    else if (mapa[f][c - 1] === 0) { pRotY = -Math.PI / 2; pOffsetX = -250; }
+                    if (mapa[f + 1] && mapa[f + 1][c] === 0) { pRotY = 0; pOffsetZ = 125; } 
+                    else if (mapa[f - 1] && mapa[f - 1][c] === 0) { pRotY = Math.PI; pOffsetZ = -125; } 
+                    else if (mapa[f][c + 1] === 0) { pRotY = Math.PI / 2; pOffsetX = 125; } 
+                    else if (mapa[f][c - 1] === 0) { pRotY = -Math.PI / 2; pOffsetX = -125; }
 
                     cargarPropEscena('models/pinpad.glb', {
                         escala: 3.5, x: posX + pOffsetX, y: 150, z: posZ + pOffsetZ, rotY: pRotY,
@@ -282,32 +280,31 @@ export function construirMundo(scene) {
                         isObstacle: false
                     });
                 } else {
-                    if (mapa[f + 1] && mapa[f + 1][c] === 0) paredesDisponibles.push({ x: posX, z: posZ + 250, rotY: 0, isFloor: false });
-                    if (mapa[f - 1] && mapa[f - 1][c] === 0) paredesDisponibles.push({ x: posX, z: posZ - 250, rotY: Math.PI, isFloor: false });
-                    if (mapa[f][c + 1] === 0) paredesDisponibles.push({ x: posX + 250, z: posZ, rotY: -Math.PI / 2, isFloor: false });
-                    if (mapa[f][c - 1] === 0) paredesDisponibles.push({ x: posX - 250, z: posZ, rotY: Math.PI / 2, isFloor: false });
+                    if (mapa[f + 1] && mapa[f + 1][c] === 0) paredesDisponibles.push({ x: posX, z: posZ + 125, rotY: 0, isFloor: false });
+                    if (mapa[f - 1] && mapa[f - 1][c] === 0) paredesDisponibles.push({ x: posX, z: posZ - 125, rotY: Math.PI, isFloor: false });
+                    if (mapa[f][c + 1] === 0) paredesDisponibles.push({ x: posX + 125, z: posZ, rotY: -Math.PI / 2, isFloor: false });
+                    if (mapa[f][c - 1] === 0) paredesDisponibles.push({ x: posX - 125, z: posZ, rotY: Math.PI / 2, isFloor: false });
                 }
             } else if (valor === 2) {
                 mapState.doorPos.set(posX, 0, posZ);
                 mapState.doorGridIndex = { r: f, c: c };
 
                 let dRotY = 0, dOffsetX = 0, dOffsetZ = 0;
-                const pushDoor = 240; 
+                const pushDoor = 125;
 
                 if (mapa[f - 1] && mapa[f - 1][c] === 0) { dRotY = 0; dOffsetZ = -pushDoor; } 
                 else if (mapa[f + 1] && mapa[f + 1][c] === 0) { dRotY = Math.PI; dOffsetZ = pushDoor; } 
                 else if (mapa[f][c - 1] === 0) { dRotY = Math.PI / 2; dOffsetX = pushDoor; } 
                 else if (mapa[f][c + 1] === 0) { dRotY = -Math.PI / 2; dOffsetX = -pushDoor; }
 
-                // Puerta escala 4.5 para rellenar el pasillo de 500
                 cargarPropEscena('models/door.glb', {
-                    escala: 4.5, x: posX + dOffsetX, y: 0, z: posZ + dOffsetZ, rotY: dRotY, alignGround: true,
+                    escala: 2.2, x: posX + dOffsetX, y: 0, z: posZ + dOffsetZ, rotY: dRotY, alignGround: true,
                     onLoad: (mesh) => { mapState.escapeDoor = mesh; },
                     isObstacle: false
                 });
 
-                const doorBarrier = new THREE.Mesh(new THREE.BoxGeometry(tileSize, alturaMuro, 40), new THREE.MeshBasicMaterial({ visible: false }));
-                doorBarrier.position.set(posX, alturaMuro / 2, posZ);
+                const doorBarrier = new THREE.Mesh(new THREE.BoxGeometry(tileSize, 350, 40), new THREE.MeshBasicMaterial({ visible: false }));
+                doorBarrier.position.set(posX, 175, posZ);
                 doorBarrier.updateMatrixWorld();
                 mapState.obstacles.push(doorBarrier);
                 mapState.doorBarrier = doorBarrier;
@@ -333,7 +330,7 @@ export function construirMundo(scene) {
                 paredesDisponibles.push({ x: posX, z: posZ, rotY: 0, isFloor: true });
 
                 let offsetX = 0, offsetZ = 0, formsL = false;
-                const pushAmount = 180;
+                const pushAmount = 75;
 
                 const N = mapa[f - 1] ? mapa[f - 1][c] : 1;
                 const S = mapa[f + 1] ? mapa[f + 1][c] : 1;
@@ -402,9 +399,8 @@ export function construirMundo(scene) {
     for (let i = 0; i < paredesDisponibles.length; i++) {
         const data = paredesDisponibles[i];
         if (!data.isFloor && randomSeguro() > 0.50 && cuadrosGenerados < 30) {
-            // FIX MARCOS 10x MÁS GRANDES: Escala 14.0 y centrados en Y = 350
             cargarPropEscena('models/cuadro.glb', {
-                escala: 14.0, x: data.x, y: 350, z: data.z, rotY: data.rotY, isObstacle: false
+                escala: 1.4, x: data.x, y: 180, z: data.z, rotY: data.rotY, isObstacle: false
             });
             cuadrosGenerados++;
         }

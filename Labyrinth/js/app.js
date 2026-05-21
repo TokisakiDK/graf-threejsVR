@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-// Rutas limpias, sin ?v=40 para no romper GitHub Pages
 import { construirMundo, iniciarVideosLaberinto } from './Labyrinth.js';
+
 import {
     consumeVRCancelPressed,
     consumeVRConfirmPressed,
@@ -75,12 +75,11 @@ function init() {
 
     crearPinpadVR3D();
     
-    // UI VR con renderOrder alto para no traspasar muros
-    vrPrompt = crearTextoPlano('', 700, 80, '#ffcc00', 995);
+    vrPrompt = crearTextoPlano('', 500, 60, '#ffcc00');
     vrPrompt.visible = false;
     scene.add(vrPrompt);
 
-    vrSuccessPrompt = crearTextoPlano('¡ESCAPASTE!', 600, 120, '#4ade80', 995);
+    vrSuccessPrompt = crearTextoPlano('¡ESCAPASTE!', 500, 100, '#4ade80');
     vrSuccessPrompt.scale.set(1.5, 1.5, 1.5);
     vrSuccessPrompt.visible = false;
     scene.add(vrSuccessPrompt);
@@ -121,7 +120,7 @@ function prepararPantallaCargaSegura() {
 
     THREE.DefaultLoadingManager.onLoad = function () {
         clearTimeout(fallbackTimer);
-        mostrarPantallaInicio(); 
+        mostrarPantallaInicio(); // ESTO FALTABA: Oculta la pantalla cuando todo carga con éxito
     };
 
     THREE.DefaultLoadingManager.onError = function (url) {
@@ -140,6 +139,7 @@ function configurarInicio() {
     const startBtn = document.getElementById('start-btn');
     if (!startBtn) return;
     startBtn.addEventListener('click', () => {
+        // Garantiza que el audio se desbloquee al hacer clic
         if (THREE.AudioContext.getContext().state !== 'running') {
             THREE.AudioContext.getContext().resume().then(() => {
                 iniciarJuego();
@@ -205,7 +205,7 @@ function configurarPinpadHTML() {
 }
 
 function cargarCielo() {
-    // RUTAS SEGURAS PARA GITHUB PAGES (Sin ../)
+    // RUTAS CORREGIDAS (sin ../)
     const catalogoCielos = [
         'assets/sky/sky_1.hdr', 'assets/sky/sky_2.hdr', 'assets/sky/sky_3.hdr', 'assets/sky/sky_4.hdr'
     ];
@@ -243,6 +243,7 @@ function crearAudio() {
     camera.add(listener);
     const audioLoader = new THREE.AudioLoader(THREE.DefaultLoadingManager);
 
+    // RUTAS CORREGIDAS (sin ../)
     const catalogoAudio = [
         'assets/bgm/dreamcore.wav', 'assets/bgm/dreamcore_2.wav', 'assets/bgm/dreamcore_3.wav', 'assets/bgm/dreamcore_4.wav'
     ];
@@ -304,9 +305,8 @@ function intentarInteractuar() {
     const pinpadPos = obtenerPosicionPinpad();
     const puertaPos = obtenerPosicionPuerta();
 
-    // Rango extendido a 700 porque los pasillos ahora miden 500 de ancho
-    const cercaDePinpad = pinpadPos && playerPos.distanceTo(pinpadPos) < 700;
-    const cercaDePuerta = puertaPos && playerPos.distanceTo(puertaPos) < 700;
+    const cercaDePinpad = pinpadPos && playerPos.distanceTo(pinpadPos) < 330;
+    const cercaDePuerta = puertaPos && playerPos.distanceTo(puertaPos) < 330;
 
     if (cercaDePinpad) {
         estaEnVR() ? abrirPinpadVR() : abrirPinpadHTML();
@@ -396,64 +396,28 @@ function actualizarPantallaPinpadHTML() {
 
 // ====================== LÓGICA PINPAD VR ======================
 
-function crearTextoPlano(texto, width, height, color, renderOrder = 990) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512; canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = color;
-    ctx.font = 'bold 64px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-
-    // PROFUNDIDAD DESACTIVADA PARA QUE NO SE HUNDA EN EL MURO
-    const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(width, height),
-        new THREE.MeshBasicMaterial({ 
-            map: texture, 
-            transparent: true, 
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
-        })
-    );
-    mesh.renderOrder = renderOrder;
-    mesh.userData = { canvas, context: ctx, texture, color };
-    return mesh;
-}
-
 function crearPinpadVR3D() {
     const group = new THREE.Group();
     group.name = 'VR_PINPAD_3D';
     group.visible = false;
 
-    const panelMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x050816, 
-        transparent: true, 
-        opacity: 0.94, 
-        side: THREE.DoubleSide,
-        depthTest: false,
-        depthWrite: false
-    });
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(520, 620), panelMaterial);
+    const panel = new THREE.Mesh(
+        new THREE.PlaneGeometry(520, 620),
+        new THREE.MeshBasicMaterial({ color: 0x050816, transparent: true, opacity: 0.94, side: THREE.DoubleSide })
+    );
     panel.position.z = -2;
-    panel.renderOrder = 990;
     group.add(panel);
 
-    const title = crearTextoPlano('PINPAD', 180, 48, '#38bdf8', 992);
+    const title = crearTextoPlano('PINPAD', 180, 48, '#38bdf8');
     title.position.set(0, 250, 1);
     group.add(title);
 
-    const screen = crearTextoPlano('----', 260, 64, '#ffffff', 992);
+    const screen = crearTextoPlano('----', 260, 64, '#ffffff');
     screen.name = 'VR_PINPAD_SCREEN';
     screen.position.set(0, 175, 1);
     group.add(screen);
 
-    const message = crearTextoPlano('A: PRESIONAR | B: CERRAR', 480, 34, '#a0a0b0', 992);
+    const message = crearTextoPlano('A: PRESIONAR | B: CERRAR', 480, 34, '#a0a0b0');
     message.name = 'VR_PINPAD_MSG';
     message.position.set(0, 125, 1);
     group.add(message);
@@ -489,24 +453,44 @@ function crearPinpadVR3D() {
 
 function crearBotonVR(label) {
     const group = new THREE.Group();
-    const bgMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0x111827, 
-        transparent: true, 
-        opacity: 0.96, 
-        side: THREE.DoubleSide,
-        depthTest: false,
-        depthWrite: false
-    });
-    const bg = new THREE.Mesh(new THREE.PlaneGeometry(label.length > 3 ? 128 : 110, 58), bgMaterial);
+    const bg = new THREE.Mesh(
+        new THREE.PlaneGeometry(label.length > 3 ? 128 : 110, 58),
+        new THREE.MeshBasicMaterial({ color: 0x111827, transparent: true, opacity: 0.96, side: THREE.DoubleSide })
+    );
     bg.name = 'BG';
-    bg.renderOrder = 991;
     group.add(bg);
 
-    const text = crearTextoPlano(label, label.length > 3 ? 120 : 90, 36, '#ffffff', 992);
+    const text = crearTextoPlano(label, label.length > 3 ? 120 : 90, 36, '#ffffff');
     text.position.z = 2;
     group.add(text);
 
     return group;
+}
+
+function crearTextoPlano(texto, width, height, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 64px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
+    ctx.restore();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(width, height),
+        new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide })
+    );
+    mesh.userData = { canvas, context: ctx, texture, color };
+    return mesh;
 }
 
 function cambiarTextoPlano(mesh, texto, color = null) {
@@ -514,11 +498,15 @@ function cambiarTextoPlano(mesh, texto, color = null) {
     const { canvas, context: ctx, texture } = mesh.userData;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
     ctx.fillStyle = color || mesh.userData.color || '#ffffff';
     ctx.font = 'bold 64px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(texto, canvas.width / 2, canvas.height / 2);
+    ctx.restore();
 
     texture.needsUpdate = true;
 }
@@ -533,16 +521,20 @@ function abrirPinpadVR() {
 
     const camPos = new THREE.Vector3();
     const camDir = new THREE.Vector3();
+    const camWorldQuat = new THREE.Quaternion();
     camera.getWorldPosition(camPos);
     camera.getWorldDirection(camDir);
+    camera.getWorldQuaternion(camWorldQuat);
     camDir.y = 0; camDir.normalize();
 
-    const pos = camPos.clone().add(camDir.multiplyScalar(100));
-    vrPinpad.group.position.set(pos.x, camPos.y - 10, pos.z);
-    
-    // TEXTO SIEMPRE AL DERECHO APUNTANDO A LA CÁMARA
-    vrPinpad.group.quaternion.copy(camera.quaternion);
-    vrPinpad.group.scale.set(0.12, 0.12, 0.12);
+    // Posicionar el pinpad justo enfrente del jugador, a la altura de sus manos
+    const pos = camPos.clone().add(camDir.multiplyScalar(120));
+    vrPinpad.group.position.set(pos.x, camPos.y - 30, pos.z);
+
+    // Usar el quaternion mundial real de la cámara VR (no el local)
+    vrPinpad.group.quaternion.copy(camWorldQuat);
+    vrPinpad.group.scale.set(0.15, 0.15, 0.15);
+
     vrPinpad.group.visible = true;
 
     actualizarPantallaPinpadVR();
@@ -664,8 +656,8 @@ function actualizarMensajeInteraccion() {
     const pinpadPos = obtenerPosicionPinpad();
     const puertaPos = obtenerPosicionPuerta();
 
-    const cercaDePinpad = pinpadPos && playerPos.distanceTo(pinpadPos) < 700;
-    const cercaDePuerta = puertaPos && playerPos.distanceTo(puertaPos) < 700;
+    const cercaDePinpad = pinpadPos && playerPos.distanceTo(pinpadPos) < 330;
+    const cercaDePuerta = puertaPos && playerPos.distanceTo(puertaPos) < 330;
 
     if (estaEnVR()) {
         if (cercaDePinpad || cercaDePuerta) {
@@ -676,14 +668,13 @@ function actualizarMensajeInteraccion() {
             camera.getWorldDirection(camDir);
             camDir.y = 0; camDir.normalize();
 
-            vrPrompt.position.copy(camPos).add(camDir.multiplyScalar(100));
-            vrPrompt.position.y -= 15; 
+            vrPrompt.position.copy(camPos).add(camDir.multiplyScalar(150));
+            vrPrompt.position.y -= 25; 
             
-            // TEXTO SIEMPRE AL DERECHO
             vrPrompt.quaternion.copy(camera.quaternion);
 
-            if (cercaDePinpad) cambiarTextoPlano(vrPrompt, 'GATILLO DCHO: USAR PINPAD', '#ffcc00');
-            else cambiarTextoPlano(vrPrompt, 'GATILLO DCHO: REVISAR PUERTA', '#ffcc00');
+            if (cercaDePinpad) cambiarTextoPlano(vrPrompt, 'GATILLO DERECHO: USAR PINPAD', '#ffcc00');
+            else cambiarTextoPlano(vrPrompt, 'GATILLO DERECHO: REVISAR PUERTA', '#ffcc00');
         } else {
             vrPrompt.visible = false;
         }
@@ -720,7 +711,7 @@ function animate() {
 
         if (doorOpened && !successTriggered) {
             const distToExit = Math.hypot(playerPos.x - mapData.doorPos.x, playerPos.z - mapData.doorPos.z);
-            if (distToExit < 400) {
+            if (distToExit < 200) {
                 successTriggered = true;
                 if (estaEnVR()) {
                     vrSuccessPrompt.visible = true;
