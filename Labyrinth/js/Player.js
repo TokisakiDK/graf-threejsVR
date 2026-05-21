@@ -1,7 +1,12 @@
 import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
 let vrRig = null;
 let cameraRef = null;
+let character = null;
+let mixer = null;
+let idleAction, walkAction, walkBackAction, runAction, runBackAction;
+let currentAction;
 
 let isVR = false;
 let portalCooldown = 0;
@@ -10,8 +15,9 @@ export let isAerialView = false;
 
 const keys = { w: false, a: false, s: false, d: false, shift: false };
 
+// Velocidades ajustadas para el mapa doblemente grande
 const config = {
-    eyeHeight: 175, radius: 40, walkSpeed: 180, runSpeed: 350, turnSpeedPC: 2.5, turnSpeedVR: 2.4, deadzone: 0.18
+    eyeHeight: 175, radius: 80, walkSpeed: 380, runSpeed: 750, turnSpeedPC: 2.5, turnSpeedVR: 2.4, deadzone: 0.18
 };
 
 const vrInput = {
@@ -25,14 +31,31 @@ const playerPosition = new THREE.Vector3();
 
 export function initPlayer(scene, spawnPosition, renderer, camera) {
     cameraRef = camera;
+    
     vrRig = new THREE.Group();
     vrRig.name = 'VR_CAMERA_RIG';
     vrRig.position.set(spawnPosition.x, config.eyeHeight, spawnPosition.z);
     scene.add(vrRig);
 
-    camera.position.set(0, 0, 0);
-    camera.rotation.set(0, 0, 0);
-    vrRig.add(camera);
+    // --- RESTAURANDO AL PERSONAJE PARA PC (3RA PERSONA) ---
+    const loader = new FBXLoader(THREE.DefaultLoadingManager);
+    loader.load('player/Idle.fbx', (fbx) => {
+        character = fbx;
+        character.scale.set(1, 1, 1);
+        character.position.set(spawnPosition.x, 0, spawnPosition.z);
+        scene.add(character);
+
+        mixer = new THREE.AnimationMixer(character);
+        idleAction = mixer.clipAction(character.animations[0]);
+
+        loader.load('player/Walking.fbx', (f) => walkAction = mixer.clipAction(f.animations[0]));
+        loader.load('player/Walking Backwards.fbx', (f) => walkBackAction = mixer.clipAction(f.animations[0]));
+        loader.load('player/Running.fbx', (f) => runAction = mixer.clipAction(f.animations[0]));
+        loader.load('player/Run Backward.fbx', (f) => runBackAction = mixer.clipAction(f.animations[0]));
+
+        currentAction = idleAction;
+        currentAction.play();
+    });
 
     playerPosition.set(spawnPosition.x, 0, spawnPosition.z);
 
@@ -49,13 +72,25 @@ export function initPlayer(scene, spawnPosition, renderer, camera) {
         if (e.key === 'Shift') keys.shift = false;
     });
 
-    renderer.xr.addEventListener('sessionstart', () => { isVR = true; resetVRInput(); });
-    renderer.xr.addEventListener('sessionend', () => { isVR = false; resetVRInput(); });
+    renderer.xr.addEventListener('sessionstart', () => { 
+        isVR = true; 
+        resetVRInput();
+        if (character) character.visible = false; // Oculta el FBX en VR
+        vrRig.add(camera); // Cámara a VR Rig
+        camera.position.set(0, 0, 0);
+        camera.rotation.set(0, 0, 0);
+        vrRig.position.set(playerPosition.x, config.eyeHeight, playerPosition.z);
+    });
+
+    renderer.xr.addEventListener('sessionend', () => { 
+        isVR = false; 
+        resetVRInput(); 
+        if (character) character.visible = true; // Muestra el FBX en PC
+        vrRig.remove(camera); // Cámara libre para PC
+    });
 }
 
 export function getPlayerPosition() {
-    if (!vrRig) return playerPosition.clone();
-    playerPosition.set(vrRig.position.x, 0, vrRig.position.z);
     return playerPosition.clone();
 }
 
@@ -80,18 +115,26 @@ export function consumeVRCancelPressed() {
 }
 
 export function updatePlayer(delta, camera, mapData, renderer, isUIOpen = false) {
-    if (!vrRig) return;
     if (isAerialView && !isVR) { updateAerialView(camera); return; }
 
     if (isVR) readVRControls(renderer);
 
+    if (mixer && !isVR) mixer.update(delta);
+
     if (!isUIOpen) {
         if (isVR) updateVRMovement(delta, mapData);
-        else updateKeyboardMovement(delta, mapData);
+        else updatePCMovement(delta, mapData, camera);
     }
 
     updatePortals(delta, mapData);
     updatePortalsFacingCamera(mapData, camera);
+}
+
+function crossFade(nextAction) {
+    if (!currentAction || !nextAction || currentAction === nextAction) return;
+    nextAction.reset().play();
+    currentAction.crossFadeTo(nextAction, 0.25, true);
+    currentAction = nextAction;
 }
 
 function resetVRInput() {
@@ -124,17 +167,13 @@ function readVRControls(renderer) {
         if (handedness === 'left') {
             vrInput.leftX = applyDeadzone(stick.x);
             vrInput.leftY = applyDeadzone(stick.y);
-            // Gatillo Izquierdo (0 o 1) para Correr
             vrInput.running = isButtonPressed(buttons, 0) || isButtonPressed(buttons, 1);
         }
 
         if (handedness === 'right') {
             vrInput.rightX = applyDeadzone(stick.x);
-            // Gatillo Derecho para Interactuar (Abrir puerta o Pinpad)
             vrInput.interactNow = isButtonPressed(buttons, 0) || isButtonPressed(buttons, 1);
-            // Botón A para presionar UI
             vrInput.confirmNow = isButtonPressed(buttons, 4);
-            // Botón B para cerrar UI
             vrInput.cancelNow = isButtonPressed(buttons, 5);
         }
     }
@@ -158,7 +197,10 @@ function applyDeadzone(value) {
     return Math.abs(value) < config.deadzone ? 0 : value;
 }
 
+// =================== MOVIMIENTO VR 1RA PERSONA ===================
 function updateVRMovement(delta, mapData) {
+    if (!vrRig) return;
+
     if (vrInput.rightX !== 0) vrRig.rotation.y -= vrInput.rightX * config.turnSpeedVR * delta;
 
     const moveX = vrInput.leftX;
@@ -185,42 +227,91 @@ function updateVRMovement(delta, mapData) {
     direction.normalize();
 
     const movement = direction.multiplyScalar(speed * delta);
-    tryMove(movement.x, movement.z, mapData);
-}
-
-function updateKeyboardMovement(delta, mapData) {
-    if (keys.a) vrRig.rotation.y += config.turnSpeedPC * delta;
-    if (keys.d) vrRig.rotation.y -= config.turnSpeedPC * delta;
-
-    let speed = 0;
-    if (keys.w) speed = keys.shift ? config.runSpeed : config.walkSpeed;
-    if (keys.s) speed = keys.shift ? -config.runSpeed : -config.walkSpeed;
-
-    if (speed === 0) return;
-
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(vrRig.quaternion);
-    direction.normalize();
-
-    const movement = direction.multiplyScalar(speed * delta);
-    tryMove(movement.x, movement.z, mapData);
-}
-
-function tryMove(moveX, moveZ, mapData) {
-    const currentX = vrRig.position.x;
-    const currentZ = vrRig.position.z;
-
-    const nextX = currentX + moveX;
-    if (!hayColision(nextX, currentZ, mapData) && !chocaConObstaculo(nextX, currentZ, mapData)) {
+    
+    const nextX = vrRig.position.x + movement.x;
+    if (!hayColision(nextX, vrRig.position.z, mapData)) {
         vrRig.position.x = nextX;
     }
 
-    const nextZ = currentZ + moveZ;
-    if (!hayColision(vrRig.position.x, nextZ, mapData) && !chocaConObstaculo(vrRig.position.x, nextZ, mapData)) {
+    const nextZ = vrRig.position.z + movement.z;
+    if (!hayColision(vrRig.position.x, nextZ, mapData)) {
         vrRig.position.z = nextZ;
     }
 
     playerPosition.set(vrRig.position.x, 0, vrRig.position.z);
+}
+
+// =================== MOVIMIENTO PC 3RA PERSONA (FBX) ===================
+function updatePCMovement(delta, mapData, camera) {
+    if (!character) return;
+
+    if (keys.a) character.rotation.y += config.turnSpeedPC * delta;
+    if (keys.d) character.rotation.y -= config.turnSpeedPC * delta;
+
+    let targetAction = idleAction;
+    let speed = 0;
+
+    if (keys.w) {
+        if (keys.shift) { targetAction = runAction; speed = config.runSpeed; } 
+        else { targetAction = walkAction; speed = config.walkSpeed; }
+    } else if (keys.s) {
+        if (keys.shift) { targetAction = runBackAction; speed = -config.runSpeed * 0.8; } 
+        else { targetAction = walkBackAction; speed = -config.walkSpeed * 0.8; }
+    }
+
+    if (targetAction !== currentAction) crossFade(targetAction);
+
+    if (speed !== 0) {
+        const direction = new THREE.Vector3(0, 0, 1);
+        direction.applyQuaternion(character.quaternion);
+        direction.normalize();
+
+        const movement = direction.multiplyScalar(speed * delta);
+
+        const nextX = character.position.x + movement.x;
+        if (!hayColision(nextX, character.position.z, mapData)) {
+            character.position.x = nextX;
+        }
+
+        const nextZ = character.position.z + movement.z;
+        if (!hayColision(character.position.x, nextZ, mapData)) {
+            character.position.z = nextZ;
+        }
+    }
+
+    playerPosition.set(character.position.x, 0, character.position.z);
+
+    // Cámara en 3ra persona con Raycaster anti-paredes
+    const playerHead = character.position.clone().add(new THREE.Vector3(0, 150, 0));
+    const zIdeal = keys.s ? -120 : -320; 
+    const yIdeal = keys.s ? 160 : 180;
+    
+    const idealCamOffset = new THREE.Vector3(0, yIdeal, zIdeal).applyQuaternion(character.quaternion);
+    const idealCamPos = character.position.clone().add(idealCamOffset);
+
+    const rayDir = idealCamPos.clone().sub(playerHead).normalize();
+    const rayDist = playerHead.distanceTo(idealCamPos);
+
+    const camRaycaster = new THREE.Raycaster();
+    camRaycaster.set(playerHead, rayDir);
+    const wallIntersects = camRaycaster.intersectObjects(mapData.obstacles, true);
+
+    let finalCamPos = idealCamPos.clone();
+    let isColliding = false;
+
+    if (wallIntersects.length > 0) {
+        const wallHit = wallIntersects[0];
+        if (wallHit.distance < rayDist) {
+            const safeDistance = Math.max(0, wallHit.distance - 30);
+            finalCamPos = playerHead.clone().add(rayDir.multiplyScalar(safeDistance));
+            isColliding = true;
+        }
+    }
+
+    if (isColliding) camera.position.lerp(finalCamPos, 0.4);
+    else camera.position.lerp(finalCamPos, 0.2);
+
+    camera.lookAt(character.position.clone().add(new THREE.Vector3(0, 120, 0)));
 }
 
 function hayColision(futuraX, futuraZ, mapData) {
@@ -239,29 +330,6 @@ function hayColision(futuraX, futuraZ, mapData) {
         mapData.grid[filaAbajo][colIzquierda], mapData.grid[filaAbajo][colDerecha]
     ];
     return esquinas.some((valor) => valor === 1 || valor === 5 || valor === 2);
-}
-
-function chocaConObstaculo(x, z, mapData) {
-    const playerBox = new THREE.Box3().setFromCenterAndSize(
-        new THREE.Vector3(x, config.eyeHeight / 2, z),
-        new THREE.Vector3(70, config.eyeHeight, 70)
-    );
-
-    for (const obstacle of mapData.obstacles) {
-        if (!obstacle || obstacle.isInstancedMesh) continue;
-
-        let obstacleBox;
-        if (obstacle.boundingBox) {
-            obstacle.updateMatrixWorld(true);
-            obstacle.boundingBox.setFromObject(obstacle);
-            obstacleBox = obstacle.boundingBox;
-        } else {
-            obstacle.updateMatrixWorld(true);
-            obstacleBox = new THREE.Box3().setFromObject(obstacle);
-        }
-        if (playerBox.intersectsBox(obstacleBox)) return true;
-    }
-    return false;
 }
 
 function updatePortals(delta, mapData) {
@@ -301,7 +369,11 @@ function getRandomSafeSpot(mapData) {
 }
 
 function teleportTo(x, z) {
-    vrRig.position.x = x; vrRig.position.z = z;
+    if (isVR && vrRig) {
+        vrRig.position.x = x; vrRig.position.z = z;
+    } else if (character) {
+        character.position.x = x; character.position.z = z;
+    }
     playerPosition.set(x, 0, z);
 }
 

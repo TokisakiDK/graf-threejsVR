@@ -60,7 +60,7 @@ export function construirMundo(scene) {
         obstacles: [], portalsArray: [], linkedPortals: [], randomPortals: [], safeSpots: [],
         spawnPosition: new THREE.Vector3(), escapeDoor: null, doorPos: new THREE.Vector3(),
         doorBarrier: null, doorGridIndex: null, pinpadObj: null, codigoSecreto: [], grid: [],
-        tileSize: 500, offset: 0, mapName: '', mapIndex: 0, mapTexture: ''
+        tileSize: 500, offset: 0, mapName: '', mapIndex: 0, mapTexture: '' // tileSize = 500
     };
 
     const glifosPosibles = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -69,15 +69,15 @@ export function construirMundo(scene) {
         mapState.codigoSecreto.push(glifosPosibles.splice(index, 1)[0]);
     }
 
-    // FIX PASILLOS ANCHOS: Duplicamos el TileSize de 250 a 500
-    // Esto duplica la separación sin alterar tu matriz 15x15
+    // PASILLOS EL DOBLE DE ANCHOS (500)
     const tileSize = 500;
-    const tamanoMapa = 15 * tileSize;
+    const alturaMuro = 700;
+    const tamanoMapa = 15 * tileSize; // 7500
 
-    const floorTex = texLoader.load('../assets/Alfombra.jpg');
+    const floorTex = texLoader.load('assets/Alfombra.jpg');
     floorTex.wrapS = THREE.RepeatWrapping;
     floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(30, 30); // Ajustado a 30 para mantener proporción visual
+    floorTex.repeat.set(30, 30); 
 
     const floorMesh = new THREE.Mesh(
         new THREE.PlaneGeometry(tamanoMapa, tamanoMapa),
@@ -89,7 +89,7 @@ export function construirMundo(scene) {
     floorMesh.receiveShadow = true;
     scene.add(floorMesh);
 
-    const geomMuro = new THREE.BoxGeometry(tileSize, 700, tileSize);
+    const geomMuro = new THREE.BoxGeometry(tileSize, alturaMuro, tileSize);
 
     const mapa1 = [
         [1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 1],
@@ -174,7 +174,7 @@ export function construirMundo(scene) {
     const mapSelection = catalogoMapas[mapIndex];
     const mapa = mapSelection.grid;
 
-    const texMuro = texLoader.load('../assets/' + mapSelection.texture);
+    const texMuro = texLoader.load('assets/' + mapSelection.texture);
     texMuro.wrapS = THREE.RepeatWrapping;
     texMuro.wrapT = THREE.RepeatWrapping;
     texMuro.repeat.set(1, 1);
@@ -182,10 +182,10 @@ export function construirMundo(scene) {
     const matMuroTapiz = new THREE.MeshStandardMaterial({ map: texMuro, roughness: 0.8 });
 
     const matPortalB = new THREE.MeshBasicMaterial({
-        map: crearTexturaDeVideo('../assets/portal_b.webm'), transparent: true, side: THREE.DoubleSide
+        map: crearTexturaDeVideo('assets/portal_b.webm'), transparent: true, side: THREE.DoubleSide
     });
     const matPortalP = new THREE.MeshBasicMaterial({
-        map: crearTexturaDeVideo('../assets/portal_p.webm'), transparent: true, side: THREE.DoubleSide
+        map: crearTexturaDeVideo('assets/portal_p.webm'), transparent: true, side: THREE.DoubleSide
     });
 
     const geomPortal = new THREE.PlaneGeometry(200, 200);
@@ -197,7 +197,7 @@ export function construirMundo(scene) {
     let spawnPositionSet = false;
     const paredesDisponibles = [];
 
-    const catalogoDecoraciones = ['../models/cactus_maceta.glb', '../models/maceta.glb'];
+    const catalogoDecoraciones = ['models/cactus_maceta.glb', 'models/maceta.glb'];
 
     const cargarPropEscena = (ruta, config) => {
         gltfLoader.load(ruta, (gltf) => {
@@ -262,7 +262,7 @@ export function construirMundo(scene) {
             const valor = mapa[f][c];
 
             if (valor === 1 || valor === 5) {
-                dummy.position.set(posX, 350, posZ);
+                dummy.position.set(posX, alturaMuro / 2, posZ);
                 dummy.updateMatrix();
                 instancedWalls.setMatrixAt(wallCounter, dummy.matrix);
                 wallCounter++;
@@ -270,13 +270,13 @@ export function construirMundo(scene) {
                 if (valor === 5) {
                     let pRotY = 0, pOffsetZ = 0, pOffsetX = 0;
 
-                    // Ajustamos a 250 porque el bloque es de 500 de ancho
+                    // Desfase de 250 (la mitad de 500)
                     if (mapa[f + 1] && mapa[f + 1][c] === 0) { pRotY = 0; pOffsetZ = 250; } 
                     else if (mapa[f - 1] && mapa[f - 1][c] === 0) { pRotY = Math.PI; pOffsetZ = -250; } 
                     else if (mapa[f][c + 1] === 0) { pRotY = Math.PI / 2; pOffsetX = 250; } 
                     else if (mapa[f][c - 1] === 0) { pRotY = -Math.PI / 2; pOffsetX = -250; }
 
-                    cargarPropEscena('../models/pinpad.glb', {
+                    cargarPropEscena('models/pinpad.glb', {
                         escala: 3.5, x: posX + pOffsetX, y: 150, z: posZ + pOffsetZ, rotY: pRotY,
                         onLoad: (mesh) => { mapState.pinpadObj = mesh; },
                         isObstacle: false
@@ -299,14 +299,15 @@ export function construirMundo(scene) {
                 else if (mapa[f][c - 1] === 0) { dRotY = Math.PI / 2; dOffsetX = pushDoor; } 
                 else if (mapa[f][c + 1] === 0) { dRotY = -Math.PI / 2; dOffsetX = -pushDoor; }
 
-                cargarPropEscena('../models/door.glb', {
-                    escala: 2.2, x: posX + dOffsetX, y: 0, z: posZ + dOffsetZ, rotY: dRotY, alignGround: true,
+                // Puerta escala 4.5 para rellenar el pasillo de 500
+                cargarPropEscena('models/door.glb', {
+                    escala: 4.5, x: posX + dOffsetX, y: 0, z: posZ + dOffsetZ, rotY: dRotY, alignGround: true,
                     onLoad: (mesh) => { mapState.escapeDoor = mesh; },
                     isObstacle: false
                 });
 
-                const doorBarrier = new THREE.Mesh(new THREE.BoxGeometry(tileSize, 700, 40), new THREE.MeshBasicMaterial({ visible: false }));
-                doorBarrier.position.set(posX, 350, posZ);
+                const doorBarrier = new THREE.Mesh(new THREE.BoxGeometry(tileSize, alturaMuro, 40), new THREE.MeshBasicMaterial({ visible: false }));
+                doorBarrier.position.set(posX, alturaMuro / 2, posZ);
                 doorBarrier.updateMatrixWorld();
                 mapState.obstacles.push(doorBarrier);
                 mapState.doorBarrier = doorBarrier;
@@ -401,8 +402,8 @@ export function construirMundo(scene) {
     for (let i = 0; i < paredesDisponibles.length; i++) {
         const data = paredesDisponibles[i];
         if (!data.isFloor && randomSeguro() > 0.50 && cuadrosGenerados < 30) {
-            // FIX MARCOS 10x MÁS GRANDES: Escala a 14.0 y Y elevada a 350
-            cargarPropEscena('../models/cuadro.glb', {
+            // FIX MARCOS 10x MÁS GRANDES: Escala 14.0 y centrados en Y = 350
+            cargarPropEscena('models/cuadro.glb', {
                 escala: 14.0, x: data.x, y: 350, z: data.z, rotY: data.rotY, isObstacle: false
             });
             cuadrosGenerados++;
