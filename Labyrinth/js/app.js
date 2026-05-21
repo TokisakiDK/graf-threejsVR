@@ -107,10 +107,13 @@ function init() {
 
     window.addEventListener('resize', onWindowResize);
     renderer.setAnimationLoop(animate);
-    mostrarPantallaInicio();
+    // mostrarPantallaInicio() la dispara DefaultLoadingManager.onLoad (o el fallback de 10s)
 }
 
 function prepararPantallaCargaSegura() {
+    // Fallback: si en 10 segundos no termina de cargar, mostramos la pantalla igual
+    const fallbackTimer = setTimeout(() => mostrarPantallaInicio(), 10000);
+
     THREE.DefaultLoadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
         const progress = itemsTotal > 0 ? (itemsLoaded / itemsTotal) * 100 : 100;
         const progressBar = document.getElementById('progress-bar');
@@ -118,6 +121,15 @@ function prepararPantallaCargaSegura() {
 
         if (progressBar) progressBar.style.width = Math.min(progress, 100) + '%';
         if (loadingText) loadingText.innerText = Math.floor(Math.min(progress, 100)) + '%';
+    };
+
+    THREE.DefaultLoadingManager.onLoad = function () {
+        clearTimeout(fallbackTimer);
+        // mostrarPantallaInicio() la dispara DefaultLoadingManager.onLoad (o el fallback de 10s)
+    };
+
+    THREE.DefaultLoadingManager.onError = function (url) {
+        console.warn('Error cargando recurso:', url);
     };
 }
 
